@@ -15,17 +15,29 @@ name: Build engine (pinned)
 # was dispatched — see docs/CI_CD.md §4's checkout-by-exact-SHA gotcha in
 # the AdventureAI repo for why that matters.
 #
-# The release step pins targetCommitish the same way, but NOT via `gh
-# release create --target <sha>` — that combination (GITHUB_TOKEN + a raw
-# commit SHA, as opposed to a branch/tag name, passed to --target) 403s
-# with "Resource not accessible by integration" even under contents:write
-# (cli/cli#9514: GITHUB_TOKEN is a GitHub App installation token, and the
-# Git Data API call gh makes to resolve an arbitrary SHA for --target is
-# blocked for App tokens specifically, independent of scope). Pushing a
-# real git tag at the pinned commit first sidesteps it — an ordinary git
-# push is not subject to that restriction — and `gh release create` from
-# the tag with no --target then points at exactly the commit the tag
-# names.
+# The release step pins targetCommitish the same way, but relies on the
+# release tag ALREADY EXISTING before this workflow is dispatched — it
+# does not create the tag itself. Two GITHUB_TOKEN restrictions rule that
+# out, and neither is fixable via the `permissions:` block at any setting:
+#   1. `gh release create --target <sha>` (a raw commit SHA, as opposed to
+#      a branch/tag name) 403s with "Resource not accessible by
+#      integration" even under contents:write (cli/cli#9514): GITHUB_TOKEN
+#      is a GitHub App installation token, and the Git Data API call gh
+#      makes to resolve an arbitrary SHA for --target is blocked for App
+#      tokens specifically, independent of scope.
+#   2. Pushing the tag as a ref instead (`git tag` + `git push`) hits a
+#      second, harder restriction: this repo's tree always contains
+#      `.github/workflows/`, and creating ANY new ref — branch or tag —
+#      that points into a tree containing workflow files needs a
+#      `workflows` permission that GITHUB_TOKEN can never hold (it isn't
+#      even a valid key in this `permissions:` block — GitHub rejects the
+#      workflow file itself if you try).
+# So the tag has to be created out-of-band, by something holding a real
+# PAT with `workflow` scope, before dispatching this workflow — see
+# docs/CI_CD.md §9 in the AdventureAI repo for the operator step. Once the
+# tag exists, `gh release create <tag>` with no --target needs only
+# contents:write, since it's creating a release from an existing ref
+# rather than resolving/creating one.
 
 on:
   workflow_dispatch:
@@ -34,19 +46,11 @@ on:
         description: "Exact commit SHA to build (must match tools/ci/engine_pin.json's source_commit in garf0134/adventure)"
         required: true
       binary_release_tag:
-        description: "Release tag to publish the built binary under (must match tools/ci/engine_pin.json's binary_release_tag)"
+        description: "Release tag to publish under — must already exist as a git tag pointing at source_commit (see header comment above)"
         required: true
 
 permissions:
   contents: write
-  # The pinned commit's tree includes changes under .github/workflows/,
-  # so pushing ANY ref that points to it — even a plain tag, not a branch
-  # — needs `workflows: write` too: GitHub blocks a GitHub App token from
-  # creating/updating a ref whose target touches workflow files under
-  # `contents` alone ("refusing to allow a GitHub App to create or update
-  # workflow ... without `workflows` permission"), regardless of which
-  # workflow file it is or whether this workflow run touches it itself.
-  workflows: write
 
 env:
   SCONS_FLAGS: >-
@@ -140,11 +144,6 @@ jobs:
         run: |
           ./bin/godot.windows.editor.x86_64.exe --version
           ./bin/godot.windows.editor.x86_64.exe --help
-
-      - name: Tag pinned commit
-        run: |
-          git tag "${{ inputs.binary_release_tag }}" "${{ inputs.source_commit }}"
-          git push origin "${{ inputs.binary_release_tag }}"
 
       - name: Publish release
         env:
