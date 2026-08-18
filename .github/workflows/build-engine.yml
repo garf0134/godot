@@ -9,12 +9,23 @@ name: Build engine (pinned)
 #
 # source_commit/binary_release_tag are passed as inputs rather than read
 # from a committed file in this repo, because the pin's source of truth
-# lives in garf0134/adventure, not here. The checkout ref and the release's
-# --target both pin explicitly to the input SHA, deliberately, so the built
-# binary and the release's targetCommitish always agree regardless of which
-# ref happened to be checked out when this workflow was dispatched — see
-# docs/CI_CD.md §4's checkout-by-exact-SHA gotcha in the AdventureAI repo
-# for why that matters.
+# lives in garf0134/adventure, not here. The checkout ref pins explicitly
+# to the input SHA, deliberately, so the built binary always matches it
+# regardless of which ref happened to be checked out when this workflow
+# was dispatched — see docs/CI_CD.md §4's checkout-by-exact-SHA gotcha in
+# the AdventureAI repo for why that matters.
+#
+# The release step pins targetCommitish the same way, but NOT via `gh
+# release create --target <sha>` — that combination (GITHUB_TOKEN + a raw
+# commit SHA, as opposed to a branch/tag name, passed to --target) 403s
+# with "Resource not accessible by integration" even under contents:write
+# (cli/cli#9514: GITHUB_TOKEN is a GitHub App installation token, and the
+# Git Data API call gh makes to resolve an arbitrary SHA for --target is
+# blocked for App tokens specifically, independent of scope). Pushing a
+# real git tag at the pinned commit first sidesteps it — an ordinary git
+# push is not subject to that restriction — and `gh release create` from
+# the tag with no --target then points at exactly the commit the tag
+# names.
 
 on:
   workflow_dispatch:
@@ -122,12 +133,16 @@ jobs:
           ./bin/godot.windows.editor.x86_64.exe --version
           ./bin/godot.windows.editor.x86_64.exe --help
 
+      - name: Tag pinned commit
+        run: |
+          git tag "${{ inputs.binary_release_tag }}" "${{ inputs.source_commit }}"
+          git push origin "${{ inputs.binary_release_tag }}"
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ inputs.binary_release_tag }}" `
             "./bin/godot.windows.editor.x86_64.exe" `
-            --target "${{ inputs.source_commit }}" `
             --title "Engine build ${{ inputs.binary_release_tag }}" `
             --notes "Pinned custom editor build for AdventureAI CI/CD (docs/CI_CD.md Phase 0, garf0134/adventure). Source commit: ${{ inputs.source_commit }}."
