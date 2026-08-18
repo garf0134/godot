@@ -1,0 +1,133 @@
+name: Build engine (pinned)
+
+# Dedicated, low-frequency build workflow for AdventureAI's custom Godot
+# binary (docs/CI_CD.md Phase 0 in garf0134/adventure). Dispatched manually
+# whenever tools/ci/engine_pin.json's source_commit changes in that repo —
+# not on every push, and not on this repo's own push/PR/merge_group events
+# (those are handled by runner.yml, gated off here via the DISABLE_GODOT_CI
+# repo variable so this fork doesn't run upstream's full ~20-job matrix).
+#
+# source_commit/binary_release_tag are passed as inputs rather than read
+# from a committed file in this repo, because the pin's source of truth
+# lives in garf0134/adventure, not here. The checkout ref and the release's
+# --target both pin explicitly to the input SHA, deliberately, so the built
+# binary and the release's targetCommitish always agree regardless of which
+# ref happened to be checked out when this workflow was dispatched — see
+# docs/CI_CD.md §4's checkout-by-exact-SHA gotcha in the AdventureAI repo
+# for why that matters.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: "Exact commit SHA to build (must match tools/ci/engine_pin.json's source_commit in garf0134/adventure)"
+        required: true
+      binary_release_tag:
+        description: "Release tag to publish the built binary under (must match tools/ci/engine_pin.json's binary_release_tag)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  SCONS_FLAGS: >-
+    dev_mode=yes
+    module_text_server_fb_enabled=yes
+    debug_symbols=no
+  SCONS_CACHE_MSVC_CONFIG: true
+  PYTHONIOENCODING: utf8
+
+jobs:
+  build-windows-editor:
+    # Matches GODOT_PATH in garf0134/adventure's .mcp.json
+    # (godot.windows.editor.x86_64.exe) — msvc, target=editor only.
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout pinned commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_commit }}
+          submodules: recursive
+
+      - name: Restore Godot build cache
+        uses: ./.github/actions/godot-cache-restore
+        with:
+          cache-name: windows-editor
+        continue-on-error: true
+
+      - name: Setup Python and SCons
+        uses: ./.github/actions/godot-deps
+
+      - name: Download Direct3D 12 SDK components
+        shell: sh
+        id: d3d12-sdk
+        run: |
+          if python ./misc/scripts/install_d3d12_sdk_windows.py; then
+            echo "D3D12_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Windows: Direct3D 12 SDK installation failed, building without Direct3D 12 support."
+            echo "D3D12_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+        continue-on-error: true
+
+      - name: Download pre-built ANGLE
+        shell: sh
+        id: angle-sdk
+        run: |
+          if python ./misc/scripts/install_angle.py; then
+            echo "ANGLE_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ANGLE SDK installation failed, building without ANGLE support."
+            echo "ANGLE_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download pre-built AccessKit
+        shell: sh
+        id: accesskit-sdk
+        run: |
+          if python ./misc/scripts/install_accesskit.py; then
+            echo "ACCESSKIT_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::AccessKit SDK installation failed, building without AccessKit support."
+            echo "ACCESSKIT_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compilation
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: >-
+            ${{ env.SCONS_FLAGS }}
+            windows_subsystem=console
+            vsproj=no
+            d3d12=${{ steps.d3d12-sdk.outputs.D3D12_ENABLED }}
+            accesskit=${{ steps.accesskit-sdk.outputs.ACCESSKIT_ENABLED }}
+            angle=${{ steps.angle-sdk.outputs.ANGLE_ENABLED }}
+          platform: windows
+          target: editor
+
+      - name: Save Godot build cache
+        uses: ./.github/actions/godot-cache-save
+        with:
+          cache-name: windows-editor
+        continue-on-error: true
+
+      - name: Prepare artifact
+        run: |
+          Remove-Item bin/build_deps -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item bin/*.exp,bin/*.lib,bin/*.pdb -Force -ErrorAction SilentlyContinue
+
+      - name: Verify binary
+        run: |
+          ./bin/godot.windows.editor.x86_64.exe --version
+          ./bin/godot.windows.editor.x86_64.exe --help
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ inputs.binary_release_tag }}" `
+            "./bin/godot.windows.editor.x86_64.exe" `
+            --target "${{ inputs.source_commit }}" `
+            --title "Engine build ${{ inputs.binary_release_tag }}" `
+            --notes "Pinned custom editor build for AdventureAI CI/CD (docs/CI_CD.md Phase 0, garf0134/adventure). Source commit: ${{ inputs.source_commit }}."
