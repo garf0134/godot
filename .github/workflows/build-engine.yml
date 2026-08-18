@@ -7,6 +7,12 @@ name: Build engine (pinned)
 # (those are handled by runner.yml, gated off here via the DISABLE_GODOT_CI
 # repo variable so this fork doesn't run upstream's full ~20-job matrix).
 #
+# debug_symbols=yes deliberately deviates from upstream's own build
+# presets (which ship it off) — this binary gets used to step into engine
+# source, not just run it, so the .pdb is kept rather than stripped in
+# "Prepare artifact" and published as a second release asset alongside
+# the .exe.
+#
 # source_commit/binary_release_tag are passed as inputs rather than read
 # from a committed file in this repo, because the pin's source of truth
 # lives in garf0134/adventure, not here. The checkout ref pins explicitly
@@ -56,7 +62,7 @@ env:
   SCONS_FLAGS: >-
     dev_mode=yes
     module_text_server_fb_enabled=yes
-    debug_symbols=no
+    debug_symbols=yes
   SCONS_CACHE_MSVC_CONFIG: true
   PYTHONIOENCODING: utf8
 
@@ -138,7 +144,7 @@ jobs:
       - name: Prepare artifact
         run: |
           Remove-Item bin/build_deps -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item bin/*.exp,bin/*.lib,bin/*.pdb -Force -ErrorAction SilentlyContinue
+          Remove-Item bin/*.exp,bin/*.lib -Force -ErrorAction SilentlyContinue
 
       - name: Verify binary
         run: |
@@ -151,5 +157,6 @@ jobs:
         run: |
           gh release create "${{ inputs.binary_release_tag }}" `
             "./bin/godot.windows.editor.x86_64.exe" `
+            "./bin/godot.windows.editor.x86_64.pdb" `
             --title "Engine build ${{ inputs.binary_release_tag }}" `
             --notes "Pinned custom editor build for AdventureAI CI/CD (docs/CI_CD.md Phase 0, garf0134/adventure). Source commit: ${{ inputs.source_commit }}."
