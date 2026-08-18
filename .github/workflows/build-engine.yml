@@ -39,6 +39,14 @@ on:
 
 permissions:
   contents: write
+  # The pinned commit's tree includes changes under .github/workflows/,
+  # so pushing ANY ref that points to it — even a plain tag, not a branch
+  # — needs `workflows: write` too: GitHub blocks a GitHub App token from
+  # creating/updating a ref whose target touches workflow files under
+  # `contents` alone ("refusing to allow a GitHub App to create or update
+  # workflow ... without `workflows` permission"), regardless of which
+  # workflow file it is or whether this workflow run touches it itself.
+  workflows: write
 
 env:
   SCONS_FLAGS: >-
