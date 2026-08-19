@@ -173,11 +173,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ inputs.binary_release_tag }}" `
-            "./bin/godot.windows.editor.x86_64.exe" `
-            "./bin/godot.windows.editor.x86_64.pdb" `
-            --title "Engine build ${{ inputs.binary_release_tag }}" `
-            --notes "Pinned custom editor build for AdventureAI CI/CD (docs/CI_CD.md Phase 0, garf0134/adventure). Source commit: ${{ inputs.source_commit }}."
+          # Idempotent, added alongside build-windows-template-release: a
+          # re-dispatch against a tag whose release already exists (e.g. to
+          # add the template job's asset after the fact, or a retry) must
+          # not fail here just because `gh release create` refuses to
+          # recreate an existing release -- upload onto it instead.
+          gh release view "${{ inputs.binary_release_tag }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "${{ inputs.binary_release_tag }}" `
+              "./bin/godot.windows.editor.x86_64.exe" `
+              "./bin/godot.windows.editor.x86_64.pdb" `
+              --clobber
+          } else {
+            gh release create "${{ inputs.binary_release_tag }}" `
+              "./bin/godot.windows.editor.x86_64.exe" `
+              "./bin/godot.windows.editor.x86_64.pdb" `
+              --title "Engine build ${{ inputs.binary_release_tag }}" `
+              --notes "Pinned custom editor build for AdventureAI CI/CD (docs/CI_CD.md Phase 0, garf0134/adventure). Source commit: ${{ inputs.source_commit }}."
+          }
 
   build-windows-template-release:
     # Windows release export template (target=template_release) — what
