@@ -44,6 +44,24 @@ name: Build engine (pinned)
 # tag exists, `gh release create <tag>` with no --target needs only
 # contents:write, since it's creating a release from an existing ref
 # rather than resolving/creating one.
+#
+# build-windows-template-release (added for docs/CI_CD.md Phase 4, release
+# builds) publishes onto this SAME release/tag via `gh release upload`,
+# `needs: build-windows-editor` so the release already exists to upload
+# onto — one engine commit, one release, every artifact (editor + release
+# export template) built from it. This is deliberate: AdventureAI's
+# release workflow exports through this template, not a stock downloaded
+# one, for the same reason it tests against the custom editor binary
+# rather than a stock download — a release built with a different engine
+# than the one CI verified against would mean the verification never
+# actually covered the binary that ships. Unlike the editor job, this one
+# carries neither dev_mode=yes (adds runtime assertions/debug checks —
+# wrong for a binary meant to run at release speed) nor debug_symbols=yes
+# (this binary isn't used to step into engine source, only the editor is);
+# windows_subsystem is also left at its default (windowed, no console)
+# rather than the editor's windows_subsystem=console, since a shipped game
+# window flashing a console on launch is a real user-facing regression the
+# editor binary doesn't need to avoid.
 
 on:
   workflow_dispatch:
@@ -160,3 +178,99 @@ jobs:
             "./bin/godot.windows.editor.x86_64.pdb" `
             --title "Engine build ${{ inputs.binary_release_tag }}" `
             --notes "Pinned custom editor build for AdventureAI CI/CD (docs/CI_CD.md Phase 0, garf0134/adventure). Source commit: ${{ inputs.source_commit }}."
+
+  build-windows-template-release:
+    # Windows release export template (target=template_release) — what
+    # AdventureAI's release workflow (docs/CI_CD.md Phase 4,
+    # garf0134/adventure) actually invokes `--export-release` against via
+    # export_presets.cfg's custom_template/release. needs:
+    # build-windows-editor so the release this uploads onto already
+    # exists; see the header comment above for why this isn't a separate
+    # tag/release.
+    needs: build-windows-editor
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout pinned commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_commit }}
+          submodules: recursive
+
+      - name: Restore Godot build cache
+        uses: ./.github/actions/godot-cache-restore
+        with:
+          cache-name: windows-template-release
+        continue-on-error: true
+
+      - name: Setup Python and SCons
+        uses: ./.github/actions/godot-deps
+
+      - name: Download Direct3D 12 SDK components
+        shell: sh
+        id: d3d12-sdk
+        run: |
+          if python ./misc/scripts/install_d3d12_sdk_windows.py; then
+            echo "D3D12_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Windows: Direct3D 12 SDK installation failed, building without Direct3D 12 support."
+            echo "D3D12_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+        continue-on-error: true
+
+      - name: Download pre-built ANGLE
+        shell: sh
+        id: angle-sdk
+        run: |
+          if python ./misc/scripts/install_angle.py; then
+            echo "ANGLE_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ANGLE SDK installation failed, building without ANGLE support."
+            echo "ANGLE_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download pre-built AccessKit
+        shell: sh
+        id: accesskit-sdk
+        run: |
+          if python ./misc/scripts/install_accesskit.py; then
+            echo "ACCESSKIT_ENABLED=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::AccessKit SDK installation failed, building without AccessKit support."
+            echo "ACCESSKIT_ENABLED=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compilation
+        uses: ./.github/actions/godot-build
+        with:
+          scons-flags: >-
+            module_text_server_fb_enabled=yes
+            vsproj=no
+            d3d12=${{ steps.d3d12-sdk.outputs.D3D12_ENABLED }}
+            accesskit=${{ steps.accesskit-sdk.outputs.ACCESSKIT_ENABLED }}
+            angle=${{ steps.angle-sdk.outputs.ANGLE_ENABLED }}
+          platform: windows
+          target: template_release
+
+      - name: Save Godot build cache
+        uses: ./.github/actions/godot-cache-save
+        with:
+          cache-name: windows-template-release
+        continue-on-error: true
+
+      - name: Prepare artifact
+        run: |
+          Remove-Item bin/build_deps -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item bin/*.exp,bin/*.lib -Force -ErrorAction SilentlyContinue
+
+      - name: Verify binary
+        run: |
+          ./bin/godot.windows.template_release.x86_64.exe --version
+
+      - name: Publish onto existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ inputs.binary_release_tag }}" `
+            "./bin/godot.windows.template_release.x86_64.exe" `
+            --clobber
