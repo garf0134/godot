@@ -473,7 +473,13 @@ void AnimationPlayerEditor::_animation_selected(int p_which) {
 
 			// Player shouldn't access parent if it's the scene root.
 			if (!root || (player == get_tree()->get_edited_scene_root() && player->get_root_node() == NodePath(".."))) {
-				NodePath cached_root_path = player->get_path_to(get_cached_root_node());
+				// get_cached_root_node() is null on a fresh session, before any
+				// prior selection has ever populated cached_root_node_id below --
+				// get_path_to(nullptr) would print a spurious "Required object
+				// p_node is null" error even though the branch below already
+				// recovers safely from an empty/unresolvable cached_root_path.
+				Node *cached_root_node = get_cached_root_node();
+				NodePath cached_root_path = cached_root_node ? player->get_path_to(cached_root_node) : NodePath();
 				if (player->get_node_or_null(cached_root_path) != nullptr) {
 					player->set_root_node(cached_root_path);
 				} else {
