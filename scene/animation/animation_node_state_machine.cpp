@@ -942,7 +942,24 @@ bool AnimationNodeStateMachinePlayback::_transition_to_next_recursive(AnimationN
 		}
 
 		if (transition_path.has(next.node)) {
-			WARN_PRINT_ONCE_ED("AnimationNodeStateMachinePlayback: " + base_path + "playback has detected one or more looped transitions in a single frame and aborted to prevent an infinite loop. You may need to check the transition settings.");
+			String path_str;
+			for (int i = 0; i < transition_path.size(); i++) {
+				if (i > 0) {
+					path_str += " -> ";
+				}
+				path_str += String(transition_path[i]);
+			}
+			path_str += " -> " + String(next.node) + " (repeat)";
+
+			String tree_id = (p_tree && p_tree->is_inside_tree()) ? String(p_tree->get_path()) : (p_tree ? String(p_tree->get_name()) : String("<null tree>"));
+
+			// Diagnostic-only: every occurrence, not just the process's first
+			// (default WARN_PRINT_ONCE_ED silences all but one ever, which made
+			// this un-debuggable across a long GUT run). Revert to
+			// WARN_PRINT_ONCE_ED once the root cause is found.
+			WARN_PRINT(vformat(
+					"AnimationNodeStateMachinePlayback: %splayback has detected one or more looped transitions in a single frame and aborted to prevent an infinite loop. tree=%s path=[%s] next_xfade=%f next_switch_mode=%d test_only=%s physics_frame=%d",
+					base_path, tree_id, path_str, next.xfade, (int)next.switch_mode, p_test_only ? "true" : "false", (int64_t)Engine::get_singleton()->get_physics_frames()));
 			break; // Maybe infinity loop, do nothing more.
 		}
 
