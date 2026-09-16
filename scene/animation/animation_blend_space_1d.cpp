@@ -126,8 +126,15 @@ void AnimationNodeBlendSpace1D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_cyclic_length", "length"), &AnimationNodeBlendSpace1D::set_cyclic_length);
 	ClassDB::bind_method(D_METHOD("get_cyclic_length"), &AnimationNodeBlendSpace1D::get_cyclic_length);
 
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "min_space", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_min_space", "get_min_space");
+	// max_space is registered first deliberately: set_min_space() clamps against
+	// max_space (min_space >= max_space => min_space = max_space - 1), so
+	// deserializing properties in ADD_PROPERTY order with min_space first would
+	// clamp it against max_space's not-yet-restored default (1.0) instead of its
+	// real saved value. Registration order is also the order the .tscn/.tres
+	// saver writes properties in, so this keeps every future save consistent
+	// with itself rather than depending on a file having been hand-ordered.
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_space", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_max_space", "get_max_space");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "min_space", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_min_space", "get_min_space");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_snap", "get_snap");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "value_label", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_value_label", "get_value_label");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "blend_mode", PROPERTY_HINT_ENUM, "Interpolated,Discrete,Carry", PROPERTY_USAGE_NO_EDITOR), "set_blend_mode", "get_blend_mode");
