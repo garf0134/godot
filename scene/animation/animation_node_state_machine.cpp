@@ -1152,7 +1152,17 @@ bool AnimationNodeStateMachinePlayback::_check_advance_condition(AnimationNode::
 				return false;
 			}
 		} else {
+			// An unresolvable base node is a failure case like the two above it,
+			// not a pass: falling through to the unconditional `return true` below
+			// used to mean every AUTO-advance transition with a non-empty
+			// advance_expression became eligible to fire whenever the base node
+			// was momentarily unset (e.g. a scene's own edit-time teardown
+			// clearing AnimationTree.advance_expression_base_node between a
+			// PRE_SAVE and its matching POST_SAVE rebuild), racing the state
+			// machine through arbitrary transitions with no real condition ever
+			// having been true.
 			WARN_PRINT_ONCE("Animation transition has a valid expression, but no expression base node was set on its AnimationTree.");
+			return false;
 		}
 	}
 
