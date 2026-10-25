@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="DrapeRingsModifier3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Evens spring chains back out around rings about an axis.
+	</brief_description>
+	<description>
+		Run after a [SpringBoneSimulator3D] whose chains hang side by side around an axis, as a skirt's columns do. Per ring (the joints at one depth down the chains), it turns each chain about the axis back to the spacing the ring had at rest, keeping each joint's height and distance from the axis, and records each ring's length over its rest length. The layout is given by [method set_layout]. It skips the physics tick's pass unless the tree is paused.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="clear_layout">
+			<return type="void" />
+			<description>
+				Removes the layout; the modifier then does nothing.
+			</description>
+		</method>
+		<method name="get_held" qualifiers="const">
+			<return type="PackedByteArray" />
+			<description>
+				Per ring, [code]1[/code] if the last drawn pass found it stretched past [member max_stretch].
+			</description>
+		</method>
+		<method name="get_largest_turn" qualifiers="const">
+			<return type="float" />
+			<description>
+				The largest turn, in radians, the last drawn pass gave a chain.
+			</description>
+		</method>
+		<method name="get_stretch" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<description>
+				Per ring, its length on the last drawn pass over its rest length.
+			</description>
+		</method>
+		<method name="set_layout">
+			<return type="void" />
+			<param index="0" name="center_bone" type="int" />
+			<param index="1" name="axes" type="PackedVector3Array" />
+			<param index="2" name="bones" type="PackedInt32Array" />
+			<param index="3" name="column_start" type="PackedInt32Array" />
+			<param index="4" name="column_size" type="PackedInt32Array" />
+			<param index="5" name="rings" type="PackedInt32Array" />
+			<param index="6" name="ring_rest" type="PackedFloat32Array" />
+			<param index="7" name="members" type="PackedInt32Array" />
+			<param index="8" name="rest_angles" type="PackedFloat32Array" />
+			<description>
+				Sets the chains and rings. [param axes] holds three vectors per panel (the axis origin, its down direction and a reference direction across it) in [param center_bone]'s rest frame. [param bones] lists every chain's bones top to bottom, chain by chain; chain [code]c[/code] is [param column_size][code][c][/code] bones from [param column_start][code][c][/code]. [param rings] holds five ints per ring: its panel, its depth down the chains (at least 1), where its members start in [param members] and [param rest_angles], how many it has (at least 2), and [code]1[/code] if it is closed. [param members] are chain indices, and [param rest_angles] each member's angle about the axis at rest. [param ring_rest] is each ring's rest length.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="held" type="PackedByteArray" setter="" getter="get_held">
+			See [method get_held].
+		</member>
+		<member name="largest_turn" type="float" setter="" getter="get_largest_turn">
+			See [method get_largest_turn].
+		</member>
+		<member name="max_stretch" type="float" setter="set_max_stretch" getter="get_max_stretch" default="1.05">
+			The stretch, a ring's length over its rest length, past which [method get_held] marks the ring.
+		</member>
+		<member name="stretch" type="PackedFloat32Array" setter="" getter="get_stretch">
+			See [method get_stretch].
+		</member>
+	</members>
+</class>
