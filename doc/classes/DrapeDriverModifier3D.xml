@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="DrapeDriverModifier3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Turns spring chains' top joints with the thighs, and hands a shader the legs' capsules.
+	</brief_description>
+	<description>
+		Run ahead of a [SpringBoneSimulator3D] whose chains hang from the hips, as a skirt's columns do. Each pass it turns every chain's top joint by its weights of the two thighs' swings from rest, following a swing that would carry the top inward reversed; past a [DrapeRingsModifier3D]'s stretch limit it follows harder (the hold). While [member seated], it turns the chains outward over a seat and lifts the lap's. Last, it sets the legs' capsules, in a [GeometryInstance3D]'s space, as that instance's [code]drape_leg_N_a[/code] and [code]drape_leg_N_b[/code] shader parameters. The layout is given by [method set_layout] and [method set_legs_layout]. It skips the physics tick's pass unless the tree is paused.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="clear_layout">
+			<return type="void" />
+			<description>
+				Removes the chains' layout; the modifier then does nothing.
+			</description>
+		</method>
+		<method name="compute_leg_capsules">
+			<return type="PackedVector4Array" />
+			<param index="0" name="skeleton" type="Skeleton3D" />
+			<param index="1" name="wardrobe" type="Node" />
+			<description>
+				The legs' capsules in [param wardrobe]'s space for [param skeleton]'s current pose: per capsule, one end and its radius, then the other end and its radius. The thighs (the first two) are zero while [member seated].
+			</description>
+		</method>
+		<method name="reset_springs_in_pass">
+			<return type="void" />
+			<description>
+				Has the next pass reset the springs given by [method set_springs_node] once it has set the chains' tops.
+			</description>
+		</method>
+		<method name="set_layout">
+			<return type="void" />
+			<param index="0" name="thighs" type="PackedInt32Array" />
+			<param index="1" name="thigh_rests" type="PackedVector4Array" />
+			<param index="2" name="thigh_along" type="PackedVector3Array" />
+			<param index="3" name="tops" type="PackedInt32Array" />
+			<param index="4" name="rests" type="PackedVector4Array" />
+			<param index="5" name="shares" type="PackedVector2Array" />
+			<param index="6" name="weights" type="PackedVector2Array" />
+			<param index="7" name="downs" type="PackedVector3Array" />
+			<param index="8" name="outs" type="PackedVector3Array" />
+			<param index="9" name="seat_turns" type="PackedVector4Array" />
+			<param index="10" name="laps" type="PackedFloat32Array" />
+			<param index="11" name="up" type="Vector3" />
+			<description>
+				Sets the chains. [param thighs] are the two thigh bones, with their rest rotations (quaternions as [code](x, y, z, w)[/code]) and their directions towards the knees. Per chain: its top bone ([code]-1[/code] to skip it), its rest rotation, its full share and its weights of each thigh [code](left, right)[/code], the way it hangs and the way out of the body, its turn over a seat, and how much of the lap it is. Directions are in the hips' frame, as is [param up].
+			</description>
+		</method>
+		<method name="set_legs_layout">
+			<return type="void" />
+			<param index="0" name="bones" type="PackedInt32Array" />
+			<param index="1" name="ends" type="PackedVector3Array" />
+			<param index="2" name="radii" type="PackedVector2Array" />
+			<description>
+				Sets the legs' capsules: per capsule its bone ([code]-1[/code] for none), its two ends in that bone's frame, and the radius at each end.
+			</description>
+		</method>
+		<method name="set_rings_node">
+			<return type="void" />
+			<param index="0" name="rings" type="Node" />
+			<description>
+				The [DrapeRingsModifier3D] whose stretch drives the hold; [code]null[/code] for none.
+			</description>
+		</method>
+		<method name="set_springs_node">
+			<return type="void" />
+			<param index="0" name="springs" type="Node" />
+			<description>
+				The [SpringBoneSimulator3D] [method reset_springs_in_pass] resets.
+			</description>
+		</method>
+		<method name="set_tuning">
+			<return type="void" />
+			<param index="0" name="max_stretch" type="float" />
+			<param index="1" name="reversed_share" type="float" />
+			<param index="2" name="seat_lap_lift" type="float" />
+			<param index="3" name="hold_span" type="float" />
+			<param index="4" name="hold_time" type="float" />
+			<description>
+				The stretch past which the hold comes in, the share of an inward swing followed reversed, the lap's lift in radians when fully seated, the stretch past [param max_stretch] (as a share of it) at which the hold is full, and the seconds the hold takes to come and go.
+			</description>
+		</method>
+		<method name="set_wardrobe_node">
+			<return type="void" />
+			<param index="0" name="wardrobe" type="Node" />
+			<description>
+				The [GeometryInstance3D] given the legs' capsules each pass; [code]null[/code] for none.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="applied" type="PackedVector2Array" setter="" getter="get_applied">
+			Per chain, how far its top followed each thigh on the last drawn pass, negative where the swing was followed reversed.
+		</member>
+		<member name="hold" type="float" setter="" getter="get_hold">
+			How much extra follow the hold added on the last drawn pass, from [code]0[/code] to [code]1[/code].
+		</member>
+		<member name="seated" type="float" setter="set_seated" getter="get_seated">
+			How far into a seat the wearer is, from [code]0[/code] to [code]1[/code].
+		</member>
+		<member name="weights" type="PackedVector2Array" setter="" getter="get_weights">
+			Per chain, how far its top follows each thigh at rest, as [method set_layout] gave it.
+		</member>
+	</members>
+</class>

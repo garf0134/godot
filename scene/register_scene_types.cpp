@@ -236,6 +236,7 @@
 #include "scene/3d/copy_transform_modifier_3d.h"
 #include "scene/3d/cpu_particles_3d.h"
 #include "scene/3d/decal.h"
+#include "scene/3d/drape_driver_modifier_3d.h"
 #include "scene/3d/drape_rings_modifier_3d.h"
 #include "scene/3d/fabr_ik_3d.h"
 #include "scene/3d/fog_volume.h"
@@ -681,6 +682,7 @@ void register_scene_types() {
 	GDREGISTER_VIRTUAL_CLASS(JointLimitation3D);
 	GDREGISTER_CLASS(JointLimitationCone3D);
 	GDREGISTER_CLASS(SpringBoneSimulator3D);
+	GDREGISTER_CLASS(DrapeDriverModifier3D);
 	GDREGISTER_CLASS(DrapeRingsModifier3D);
 	GDREGISTER_VIRTUAL_CLASS(SpringBoneCollision3D);
 	GDREGISTER_CLASS(SpringBoneCollisionSphere3D);
