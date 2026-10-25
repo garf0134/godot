@@ -68,6 +68,10 @@ public:
 		Quaternion current_rot;
 		Vector3 forward_vector;
 		float length = 0.0;
+		// The local pose rotation the last step set, re-applied by a pass with
+		// no elapsed time; `posed` once a step has set it.
+		Quaternion pose_rotation;
+		bool posed = false;
 	};
 
 	struct SpringBone3DJointSetting {
@@ -174,6 +178,7 @@ protected:
 	virtual void _set_active(bool p_active) override;
 	virtual void _process_modification(double p_delta) override;
 	void _init_joints(Skeleton3D *p_skeleton, SpringBone3DSetting *p_setting);
+	bool _hold_joints(Skeleton3D *p_skeleton, SpringBone3DSetting *p_setting);
 	void _process_joints(double p_delta, Skeleton3D *p_skeleton, LocalVector<SpringBone3DJointSetting *> &p_joints, const LocalVector<ObjectID> &p_collisions, const Transform3D &p_center_transform, const Transform3D &p_inverted_center_transform, const Quaternion &p_inverted_center_rotation);
 
 	void _make_joints_dirty(int p_index, bool p_reset = false);

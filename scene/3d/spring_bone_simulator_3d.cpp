@@ -1718,6 +1718,22 @@ void SpringBoneSimulator3D::_process_modification(double p_delta) {
 	if (!skeleton) {
 		return;
 	}
+	// A pass with no time elapsed re-applies the last step's pose and takes no
+	// step (see _process_joints()): the skeleton restores its poses after its
+	// modifiers, so a hold must still set them, but reading the colliders and
+	// the global poses again is not needed for it. A setting not yet stepped
+	// since its joints were (re)built goes through the full path.
+	if (p_delta <= 0.0) {
+		bool all_held = true;
+		for (uint32_t i = 0; i < settings.size(); i++) {
+			if (!_hold_joints(skeleton, settings[i])) {
+				all_held = false;
+			}
+		}
+		if (all_held) {
+			return;
+		}
+	}
 	_find_collisions();
 	_process_collisions();
 
@@ -1731,6 +1747,25 @@ void SpringBoneSimulator3D::_process_modification(double p_delta) {
 		_init_joints(skeleton, settings[i]);
 		_process_joints(p_delta, skeleton, settings[i]->joints, get_valid_collision_instance_ids(i), settings[i]->cached_center, settings[i]->cached_inverted_center, settings[i]->cached_inverted_center.basis.get_rotation_quaternion());
 	}
+}
+
+bool SpringBoneSimulator3D::_hold_joints(Skeleton3D *p_skeleton, SpringBone3DSetting *p_setting) {
+	if (p_setting->simulation_dirty || p_setting->joints_dirty) {
+		return false;
+	}
+	for (uint32_t i = 0; i < p_setting->joints.size(); i++) {
+		SpringBone3DVerletInfo *verlet = p_setting->joints[i]->verlet;
+		if (verlet && !verlet->posed) {
+			return false;
+		}
+	}
+	for (uint32_t i = 0; i < p_setting->joints.size(); i++) {
+		SpringBone3DVerletInfo *verlet = p_setting->joints[i]->verlet;
+		if (verlet) {
+			p_skeleton->set_bone_pose_rotation(p_setting->joints[i]->bone, verlet->pose_rotation);
+		}
+	}
+	return true;
 }
 
 void SpringBoneSimulator3D::reset() {
@@ -1892,6 +1927,8 @@ void SpringBoneSimulator3D::_process_joints(double p_delta, Skeleton3D *p_skelet
 		from_to *= current_rot;
 		from_to = get_local_pose_rotation(p_skeleton, p_joints[i]->bone, from_to);
 		p_skeleton->set_bone_pose_rotation(p_joints[i]->bone, from_to);
+		verlet->pose_rotation = from_to;
+		verlet->posed = true;
 	}
 }
 
