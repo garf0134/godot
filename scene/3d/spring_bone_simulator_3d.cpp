@@ -1829,6 +1829,23 @@ void SpringBoneSimulator3D::_process_joints(double p_delta, Skeleton3D *p_skelet
 		Vector3 current_origin = p_center_transform.xform(current_global_pose.origin);
 		Vector3 external = p_inverted_center_rotation.xform((external_force + p_joints[i]->gravity_direction * p_joints[i]->gravity) * p_delta);
 
+		// A pass with no time elapsed re-poses from the last step without taking
+		// another: the verlet carry is per step, not per second, so a skeleton
+		// updated twice in a frame (once by a pose change in the physics tick,
+		// once by its own advance) would otherwise carry momentum twice.
+		if (p_delta <= 0.0) {
+			Vector3 held_tail = limit_length(current_origin, verlet->current_tail, verlet->length);
+			Vector3 from = current_rot.xform(verlet->forward_vector);
+			Vector3 to = p_inverted_center_transform.basis.xform(held_tail - current_origin);
+			from.normalize();
+			to.normalize();
+			Quaternion from_to = get_from_to_rotation(from, to, verlet->current_rot);
+			from_to *= current_rot;
+			from_to = get_local_pose_rotation(p_skeleton, p_joints[i]->bone, from_to);
+			p_skeleton->set_bone_pose_rotation(p_joints[i]->bone, from_to);
+			continue;
+		}
+
 		// Integration of velocity by verlet.
 		Vector3 next_tail = verlet->current_tail +
 				(verlet->current_tail - verlet->prev_tail) * (1.0 - p_joints[i]->drag) +
