@@ -58,6 +58,9 @@ class DrapeDriverModifier3D : public SkeletonModifier3D {
 	LocalVector<Vector3> outs;
 	LocalVector<Quaternion> seat_turns;
 	LocalVector<float> laps;
+	// Per column, how much of its follow and lap lift a seat takes away
+	// (set_seat_turns()).
+	LocalVector<float> presses;
 	Vector3 up = Vector3(0, 1, 0);
 
 	// Tuning, the script's constants.
@@ -99,6 +102,7 @@ public:
 			const PackedVector3Array &p_downs, const PackedVector3Array &p_outs, const PackedVector4Array &p_seat_turns, const PackedFloat32Array &p_laps,
 			const Vector3 &p_up);
 	void clear_layout();
+	void set_seat_turns(const PackedVector4Array &p_seat_turns, const PackedFloat32Array &p_presses);
 	void set_tuning(double p_max_stretch, double p_reversed_share, double p_seat_lap_lift, double p_hold_span, double p_hold_time);
 	void set_legs_layout(const PackedInt32Array &p_bones, const PackedVector3Array &p_ends, const PackedVector2Array &p_radii);
 

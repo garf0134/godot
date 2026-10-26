@@ -71,6 +71,18 @@ void DrapeDriverModifier3D::set_layout(const PackedInt32Array &p_thighs, const P
 	up = p_up;
 }
 
+void DrapeDriverModifier3D::set_seat_turns(const PackedVector4Array &p_seat_turns, const PackedFloat32Array &p_presses) {
+	ERR_FAIL_COND_MSG(p_seat_turns.size() != (int)seat_turns.size() || (p_presses.size() != 0 && p_presses.size() != p_seat_turns.size()),
+			"set_seat_turns() needs a turn per column of the layout, and a press per column or none.");
+	for (int c = 0; c < p_seat_turns.size(); c++) {
+		seat_turns[c] = _quaternion_of(p_seat_turns[c]);
+	}
+	presses.clear();
+	for (int c = 0; c < p_presses.size(); c++) {
+		presses.push_back(p_presses[c]);
+	}
+}
+
 void DrapeDriverModifier3D::clear_layout() {
 	thighs.clear();
 	thigh_rests.clear();
@@ -192,8 +204,12 @@ void DrapeDriverModifier3D::_process_modification(double p_delta) {
 			continue;
 		}
 		Vector2 w = hold > 0.0 ? weights[c].lerp(shares[c], hold) : weights[c];
+		// A column pressed onto the seat lies along it: it neither follows the
+		// thighs nor lifts over them.
+		const float press = c < presses.size() ? presses[c] : 0.0f;
 		if (seated > 0.0) {
 			w = w.lerp(shares[c], seated * laps[c]);
+			w = w.lerp(Vector2(), seated * press);
 		}
 		const float w_l = _outward_weight(swing_l, c, w.x);
 		const float w_r = _outward_weight(swing_r, c, w.y);
@@ -203,7 +219,7 @@ void DrapeDriverModifier3D::_process_modification(double p_delta) {
 			turned = Quaternion().slerp(seat_turns[c], seated) * turned;
 			const Vector3 lift_axis = turned.xform(downs[c]).cross(up);
 			if (laps[c] > 0.0f && lift_axis.length_squared() > 1e-8f) {
-				turned = Quaternion(lift_axis.normalized(), seat_lap_lift * seated * laps[c]) * turned;
+				turned = Quaternion(lift_axis.normalized(), seat_lap_lift * seated * laps[c] * (1.0f - press)) * turned;
 			}
 		}
 		skeleton->set_bone_pose_rotation(tops[c], turned * rests[c]);
@@ -281,6 +297,7 @@ PackedVector2Array DrapeDriverModifier3D::get_applied() const {
 void DrapeDriverModifier3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_layout", "thighs", "thigh_rests", "thigh_along", "tops", "rests", "shares", "weights", "downs", "outs", "seat_turns", "laps", "up"), &DrapeDriverModifier3D::set_layout);
 	ClassDB::bind_method(D_METHOD("clear_layout"), &DrapeDriverModifier3D::clear_layout);
+	ClassDB::bind_method(D_METHOD("set_seat_turns", "seat_turns", "presses"), &DrapeDriverModifier3D::set_seat_turns);
 	ClassDB::bind_method(D_METHOD("set_tuning", "max_stretch", "reversed_share", "seat_lap_lift", "hold_span", "hold_time"), &DrapeDriverModifier3D::set_tuning);
 	ClassDB::bind_method(D_METHOD("set_legs_layout", "bones", "ends", "radii"), &DrapeDriverModifier3D::set_legs_layout);
 	ClassDB::bind_method(D_METHOD("set_rings_node", "rings"), &DrapeDriverModifier3D::set_rings_node);

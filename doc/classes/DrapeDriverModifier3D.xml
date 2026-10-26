@@ -63,6 +63,14 @@
 				The [DrapeRingsModifier3D] whose stretch drives the hold; [code]null[/code] for none.
 			</description>
 		</method>
+		<method name="set_seat_turns">
+			<return type="void" />
+			<param index="0" name="seat_turns" type="PackedVector4Array" />
+			<param index="1" name="presses" type="PackedFloat32Array" />
+			<description>
+				Replaces the layout's seat turns (one quaternion per column, as [method set_layout] takes them), so a driver can turn its columns one way on a seat and another on a bed. With them, per column, the share of its follow of the thighs and of its lap lift that being seated takes away, so a column laid along the seat stays there; none given, a seat takes none.
+			</description>
+		</method>
 		<method name="set_springs_node">
 			<return type="void" />
 			<param index="0" name="springs" type="Node" />
