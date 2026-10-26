@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="DrapeClothModifier3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		A position-based cloth solve over chains of bones hanging side by side.
+	</brief_description>
+	<description>
+		Moves chains of bones that hang side by side around a body, as a skirt's columns do, as one piece of cloth. Each chain's joints are particles, the top of each chain pinned where the pose put it, with a tip past each chain's last bone. Links run down each chain (held to their length), round each ring of joints and diagonally to the ring above (held from stretching, free to gather), and capsules on the skeleton's bones push out the particles and every link between them. Each joint is drawn toward its hang in the incoming pose, by [member top_pull] at the top fading to [member hem_pull] at the bottom; gravity has the rest. The solve runs in the center bone's frame, so the skeleton's travel does not swing it. The layout is given by [method set_layout] and the capsules by [method set_colliders]. It skips the physics tick's pass unless the tree is paused, and holds the last solve on a pass with no elapsed time.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="clear_layout">
+			<return type="void" />
+			<description>
+				Removes the layout; the modifier then does nothing.
+			</description>
+		</method>
+		<method name="get_particles" qualifiers="const">
+			<return type="PackedVector3Array" />
+			<description>
+				Every particle's place after the last solve, in the center bone's frame.
+			</description>
+		</method>
+		<method name="get_resets" qualifiers="const">
+			<return type="int" />
+			<description>
+				How many times a pose jumping more than [member snap_distance] has started the cloth over.
+			</description>
+		</method>
+		<method name="reset">
+			<return type="void" />
+			<description>
+				Starts the cloth over from the next pass's pose.
+			</description>
+		</method>
+		<method name="set_colliders">
+			<return type="void" />
+			<param index="0" name="bones" type="PackedInt32Array" />
+			<param index="1" name="ends" type="PackedVector3Array" />
+			<param index="2" name="radii" type="PackedVector2Array" />
+			<description>
+				Per capsule: the bone it is on, its axis's two ends in that bone's frame (two entries per capsule in [param ends]), and its radius at each end.
+			</description>
+		</method>
+		<method name="set_layout">
+			<return type="void" />
+			<param index="0" name="center_bone" type="int" />
+			<param index="1" name="bones" type="PackedInt32Array" />
+			<param index="2" name="parents" type="PackedInt32Array" />
+			<param index="3" name="tip_lengths" type="PackedFloat32Array" />
+			<param index="4" name="links" type="PackedInt32Array" />
+			<description>
+				The particles, chain by chain from top to tip: per particle its bone ([code]-1[/code] for a tip past the bone before it), the particle above it ([code]-1[/code] for a chain's pinned top, otherwise the particle listed before it), and a tip's length. [param links] has three ints per link: its two particles and its [enum LinkKind]. Link lengths are measured from the bones' rests on the first pass.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="damping" type="float" setter="set_damping" getter="get_damping" default="0.04">
+			The share of each particle's velocity lost each pass.
+		</member>
+		<member name="gravity" type="float" setter="set_gravity" getter="get_gravity" default="9.8">
+			Gravity's acceleration, downward in the skeleton's space.
+		</member>
+		<member name="hem_pull" type="float" setter="set_hem_pull" getter="get_hem_pull" default="0.15">
+			Per pass, the share of the way the deepest joints are drawn toward their hang in the pose.
+		</member>
+		<member name="iterations" type="int" setter="set_iterations" getter="get_iterations" default="4">
+			How many times each pass the links and capsules are satisfied in turn.
+		</member>
+		<member name="ring_stiffness" type="float" setter="set_ring_stiffness" getter="get_ring_stiffness" default="0.5">
+			The share of a stretched ring link's excess taken out each iteration.
+		</member>
+		<member name="shear_stiffness" type="float" setter="set_shear_stiffness" getter="get_shear_stiffness" default="0.3">
+			The share of a stretched diagonal link's excess taken out each iteration.
+		</member>
+		<member name="snap_distance" type="float" setter="set_snap_distance" getter="get_snap_distance" default="0.15">
+			A joint just below a pinned top moving more than this in one pass, in the center bone's frame (a pose restored, a cut in the animation), starts the cloth over from the pose. The joints further down are not watched: a stride may swing them that far.
+		</member>
+		<member name="thickness" type="float" setter="set_thickness" getter="get_thickness" default="0.015">
+			Added to every capsule's radius.
+		</member>
+		<member name="top_pull" type="float" setter="set_top_pull" getter="get_top_pull" default="1.0">
+			Per pass, the share of the way the first joints below the pinned tops are drawn toward their hang in the pose.
+		</member>
+	</members>
+	<constants>
+		<constant name="LINK_COLUMN" value="0" enum="LinkKind">
+			A link down a chain, held to its length.
+		</constant>
+		<constant name="LINK_RING" value="1" enum="LinkKind">
+			A link between neighbouring chains at one depth, held from stretching.
+		</constant>
+		<constant name="LINK_DIAGONAL" value="2" enum="LinkKind">
+			A link from a joint to its neighbour's joint above, held from stretching.
+		</constant>
+	</constants>
+</class>
