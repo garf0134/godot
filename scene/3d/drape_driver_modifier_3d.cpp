@@ -229,8 +229,9 @@ PackedVector4Array DrapeDriverModifier3D::compute_leg_capsules(Skeleton3D *p_ske
 	Vector4 *out = capsules.ptrw();
 	for (uint32_t k = 0; k < leg_bones.size(); k++) {
 		const int bone = leg_bones[k];
-		// The thighs push nothing while seated: the slab holds the lap's cloth.
-		if (bone < 0 || bone >= bone_count || (k < 2 && seated > 0.0)) {
+		// The thighs push seated too: the slab holds the cloth under them, not
+		// the lap over them.
+		if (bone < 0 || bone >= bone_count) {
 			out[k * 2] = Vector4();
 			out[k * 2 + 1] = Vector4();
 			continue;
