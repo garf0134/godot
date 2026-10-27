@@ -402,6 +402,7 @@ void DrapeDriverModifier3D::_process_modification(double p_delta) {
 		}
 	}
 	_push_legs(skeleton);
+	_push_hips(skeleton);
 }
 
 PackedVector4Array DrapeDriverModifier3D::compute_leg_capsules(Skeleton3D *p_skeleton, Node *p_wardrobe) {
@@ -439,6 +440,41 @@ void DrapeDriverModifier3D::_push_legs(Skeleton3D *p_skeleton) {
 	const RID instance = wardrobe->get_instance();
 	for (int i = 0; i < capsules.size(); i++) {
 		rs->instance_geometry_set_shader_parameter(instance, leg_params[i], capsules[i]);
+	}
+}
+
+void DrapeDriverModifier3D::set_seated_hips(int p_bone, const Transform3D &p_bind, Node *p_wardrobe) {
+	seated_hips = p_bone;
+	seated_bind = p_bind;
+	seated_wardrobe_id = p_wardrobe ? p_wardrobe->get_instance_id() : ObjectID();
+}
+
+Transform3D DrapeDriverModifier3D::compute_seated_hips(Skeleton3D *p_skeleton, int p_bone, const Transform3D &p_bind, Node *p_wardrobe) {
+	Node3D *wardrobe = Object::cast_to<Node3D>(p_wardrobe);
+	ERR_FAIL_NULL_V(p_skeleton, Transform3D());
+	ERR_FAIL_NULL_V(wardrobe, Transform3D());
+	ERR_FAIL_INDEX_V(p_bone, p_skeleton->get_bone_count(), Transform3D());
+	// A target vertex is in the mesh's data with the hips at rest: to the
+	// skeleton's space, carried from the hips' rest to their pose, then into
+	// the mesh's space as the skinned vertex is.
+	const Transform3D to_mesh = wardrobe->get_global_transform().affine_inverse() * p_skeleton->get_global_transform();
+	return to_mesh * p_skeleton->get_bone_global_pose(p_bone) * p_skeleton->get_bone_global_rest(p_bone).affine_inverse() * p_bind;
+}
+
+void DrapeDriverModifier3D::_push_hips(Skeleton3D *p_skeleton) {
+	if (seated_hips < 0 || seated_hips >= p_skeleton->get_bone_count()) {
+		return;
+	}
+	GeometryInstance3D *wardrobe = ObjectDB::get_instance<GeometryInstance3D>(seated_wardrobe_id);
+	if (!wardrobe) {
+		return;
+	}
+	const Transform3D hips = compute_seated_hips(p_skeleton, seated_hips, seated_bind, wardrobe);
+	RenderingServer *rs = RenderingServer::get_singleton();
+	const RID instance = wardrobe->get_instance();
+	for (int k = 0; k < 3; k++) {
+		const Vector3 row = hips.basis.rows[k];
+		rs->instance_geometry_set_shader_parameter(instance, hips_params[k], Vector4(row.x, row.y, row.z, hips.origin[k]));
 	}
 }
 
@@ -489,6 +525,8 @@ void DrapeDriverModifier3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_wardrobe_node", "wardrobe"), &DrapeDriverModifier3D::set_wardrobe_node);
 	ClassDB::bind_method(D_METHOD("reset_springs_in_pass"), &DrapeDriverModifier3D::reset_springs_in_pass);
 	ClassDB::bind_method(D_METHOD("compute_leg_capsules", "skeleton", "wardrobe"), &DrapeDriverModifier3D::compute_leg_capsules);
+	ClassDB::bind_method(D_METHOD("set_seated_hips", "bone", "bind", "wardrobe"), &DrapeDriverModifier3D::set_seated_hips);
+	ClassDB::bind_static_method("DrapeDriverModifier3D", D_METHOD("compute_seated_hips", "skeleton", "bone", "bind", "wardrobe"), &DrapeDriverModifier3D::compute_seated_hips);
 	ClassDB::bind_method(D_METHOD("set_seated", "seated"), &DrapeDriverModifier3D::set_seated);
 	ClassDB::bind_method(D_METHOD("get_seated"), &DrapeDriverModifier3D::get_seated);
 	ClassDB::bind_method(D_METHOD("get_hold"), &DrapeDriverModifier3D::get_hold);
@@ -512,4 +550,10 @@ void DrapeDriverModifier3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT32_ARRAY, "legs", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "", "get_legs");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "pose_variant", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "", "get_pose_variant");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "pose_weight", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "", "get_pose_weight");
+}
+
+DrapeDriverModifier3D::DrapeDriverModifier3D() {
+	for (int k = 0; k < 3; k++) {
+		hips_params[k] = StringName(vformat("drape_hips_%d", k));
+	}
 }

@@ -29,6 +29,16 @@
 				The legs' capsules in [param wardrobe]'s space for [param skeleton]'s current pose: per capsule, one end and its radius, then the other end and its radius. The thighs (the first two) are zero while [member seated].
 			</description>
 		</method>
+		<method name="compute_seated_hips" qualifiers="static">
+			<return type="Transform3D" />
+			<param index="0" name="skeleton" type="Skeleton3D" />
+			<param index="1" name="bone" type="int" />
+			<param index="2" name="bind" type="Transform3D" />
+			<param index="3" name="wardrobe" type="Node" />
+			<description>
+				The transform taking a seated target's vertex, in [param wardrobe]'s mesh data with the hips at rest, to where the skinned mesh is: by [param bind] to [param skeleton]'s space, carried from [param bone]'s rest to its pose, then into [param wardrobe]'s space.
+			</description>
+		</method>
 		<method name="reset_springs_in_pass">
 			<return type="void" />
 			<description>
@@ -97,6 +107,15 @@
 			<param index="1" name="presses" type="PackedFloat32Array" />
 			<description>
 				Replaces the layout's seat turns (one quaternion per column, as [method set_layout] takes them), so a driver can turn its columns one way on a seat and another on a bed. With them, per column, the share of its follow of the thighs and of its lap lift that being seated takes away, so a column laid along the seat stays there; none given, a seat takes none.
+			</description>
+		</method>
+		<method name="set_seated_hips">
+			<return type="void" />
+			<param index="0" name="bone" type="int" />
+			<param index="1" name="bind" type="Transform3D" />
+			<param index="2" name="wardrobe" type="Node" />
+			<description>
+				Each pass, sets [param wardrobe]'s [code]drape_hips_0[/code] to [code]drape_hips_2[/code] instance uniforms to the rows of [method compute_seated_hips], for the wardrobe shader's seated target. A [param bone] of [code]-1[/code] sets nothing.
 			</description>
 		</method>
 		<method name="set_springs_node">

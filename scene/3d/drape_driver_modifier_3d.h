@@ -87,6 +87,14 @@ class DrapeDriverModifier3D : public SkeletonModifier3D {
 	ObjectID wardrobe_id;
 	bool reset_springs = false;
 
+	// The seated target's hips (§6.10 there): the bone, the transform from
+	// the wardrobe mesh's data to the skeleton's space at rest, and the
+	// wardrobe whose three rows it sets.
+	int seated_hips = -1;
+	Transform3D seated_bind;
+	ObjectID seated_wardrobe_id;
+	StringName hips_params[3];
+
 	// Pose targets (§6.4 there): every chain bone, its rest, and per pose
 	// variant its rotation in that pose, variant by variant; per variant its
 	// leg angles (both thighs' swings, then both knees' bends). Per column,
@@ -120,6 +128,7 @@ class DrapeDriverModifier3D : public SkeletonModifier3D {
 	Quaternion _swing(Skeleton3D *p_skeleton, int p_k) const;
 	float _outward_weight(const Quaternion &p_swing, int p_c, float p_weight) const;
 	void _push_legs(Skeleton3D *p_skeleton);
+	void _push_hips(Skeleton3D *p_skeleton);
 	void _measure_legs(Skeleton3D *p_skeleton);
 	void _weigh_poses();
 
@@ -151,6 +160,10 @@ public:
 	void reset_springs_in_pass();
 
 	PackedVector4Array compute_leg_capsules(Skeleton3D *p_skeleton, Node *p_wardrobe);
+	void set_seated_hips(int p_bone, const Transform3D &p_bind, Node *p_wardrobe);
+	static Transform3D compute_seated_hips(Skeleton3D *p_skeleton, int p_bone, const Transform3D &p_bind, Node *p_wardrobe);
+
+	DrapeDriverModifier3D();
 
 	void set_seated(double p_seated);
 	double get_seated() const;
