@@ -19,7 +19,7 @@
 		<method name="clear_seat">
 			<return type="void" />
 			<description>
-				Removes the seat.
+				Removes the seat and the floor.
 			</description>
 		</method>
 		<method name="get_centres" qualifiers="const">
@@ -79,7 +79,7 @@
 			<return type="Vector3" />
 			<param index="0" name="point" type="Vector3" />
 			<description>
-				[param point] lifted onto the seat when it is below it inside the footprint.
+				[param point] lifted onto the seat when it is below it inside the footprint, or onto the floor when it is below it anywhere.
 			</description>
 		</method>
 		<method name="pull_in" qualifiers="const">
@@ -94,6 +94,13 @@
 			<param index="0" name="point" type="Vector3" />
 			<description>
 				[param point] moved out of every inner piece, through the nearest face whose far side is in no other piece.
+			</description>
+		</method>
+		<method name="set_floor">
+			<return type="void" />
+			<param index="0" name="level" type="float" />
+			<description>
+				Sets a floor at height [param level] along the seat's up, held everywhere, not only within the footprint: cloth longer than the sitter's legs rests on it. Needs a seat ([method set_seat]) for its direction.
 			</description>
 		</method>
 		<method name="set_hull">
@@ -151,7 +158,7 @@
 			<param index="0" name="point" type="Vector3" />
 			<param index="1" name="tolerance" type="float" />
 			<description>
-				Whether [param point] is more than [param tolerance] below the seat inside the footprint.
+				Whether [param point] is more than [param tolerance] below the seat inside the footprint, or below the floor anywhere.
 			</description>
 		</method>
 	</methods>

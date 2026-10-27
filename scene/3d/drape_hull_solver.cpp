@@ -90,8 +90,13 @@ void DrapeHullSolver::set_seat(const Vector3 &p_up, real_t p_level, const Packed
 	}
 }
 
+void DrapeHullSolver::set_floor(real_t p_level) {
+	floor_level = p_level;
+}
+
 void DrapeHullSolver::clear_seat() {
 	has_seat = false;
+	floor_level = -Math::INF;
 	footprint_from.clear();
 	footprint_to.clear();
 	footprint_reach.clear();
@@ -275,15 +280,23 @@ bool DrapeHullSolver::in_footprint(const Vector3 &p_point) const {
 }
 
 bool DrapeHullSolver::under_seat(const Vector3 &p_point, real_t p_tolerance) const {
-	return has_seat && p_point.dot(seat_up) < seat_level - p_tolerance && in_footprint(p_point);
+	if (!has_seat) {
+		return false;
+	}
+	const real_t height = p_point.dot(seat_up);
+	return height < floor_level - p_tolerance || (height < seat_level - p_tolerance && in_footprint(p_point));
 }
 
-// Lifted onto the seat where it is under it inside the footprint.
+// Lifted onto the seat where it is under it inside the footprint, and onto
+// the floor anywhere under it.
 Vector3 DrapeHullSolver::on_seat(const Vector3 &p_point) const {
 	if (!has_seat) {
 		return p_point;
 	}
 	const real_t height = p_point.dot(seat_up);
+	if (height < floor_level + seat_skin) {
+		return p_point + seat_up * (floor_level + seat_skin - height);
+	}
 	if (height >= seat_level + seat_skin || !in_footprint(p_point)) {
 		return p_point;
 	}
@@ -393,6 +406,7 @@ void DrapeHullSolver::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_hull", "planes", "piece_ends", "outer"), &DrapeHullSolver::set_hull);
 	ClassDB::bind_method(D_METHOD("set_seat", "up", "level", "footprint", "reaches"), &DrapeHullSolver::set_seat);
 	ClassDB::bind_method(D_METHOD("clear_seat"), &DrapeHullSolver::clear_seat);
+	ClassDB::bind_method(D_METHOD("set_floor", "level"), &DrapeHullSolver::set_floor);
 	ClassDB::bind_method(D_METHOD("set_tuning", "skin", "seat_skin", "inner_passes", "outer_passes"), &DrapeHullSolver::set_tuning);
 	ClassDB::bind_method(D_METHOD("get_centres"), &DrapeHullSolver::get_centres);
 	ClassDB::bind_method(D_METHOD("get_radii"), &DrapeHullSolver::get_radii);

@@ -56,6 +56,9 @@ class DrapeHullSolver : public RefCounted {
 	bool has_seat = false;
 	Vector3 seat_up = Vector3(0, 1, 0);
 	real_t seat_level = 0.0;
+	// The floor under the sitter's feet, along seat_up, everywhere: a hem
+	// longer than the shins rests on it. -INF for none.
+	real_t floor_level = -Math::INF;
 	LocalVector<Vector3> footprint_from;
 	LocalVector<Vector3> footprint_to;
 	LocalVector<real_t> footprint_reach;
@@ -80,6 +83,7 @@ public:
 	void set_hull(const PackedVector4Array &p_planes, const PackedInt32Array &p_piece_ends, const PackedByteArray &p_outer);
 	void set_seat(const Vector3 &p_up, real_t p_level, const PackedVector3Array &p_footprint, const PackedFloat32Array &p_reaches);
 	void clear_seat();
+	void set_floor(real_t p_level);
 	void set_tuning(real_t p_skin, real_t p_seat_skin, int p_inner_passes, int p_outer_passes);
 
 	PackedVector3Array get_centres() const;
