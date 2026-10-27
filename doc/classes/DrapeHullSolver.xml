@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="DrapeHullSolver" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Holds cloth between two unions of convex pieces and above a seat.
+	</brief_description>
+	<description>
+		Builds a seated garment's shape: the cloth may not enter the inner union of convex pieces nor leave the outer one, and may not pass below a seat plane inside a footprint. The pieces are given by [method set_hull] and the seat by [method set_seat]. [method solve] settles a starting shape and keeps its edges whole.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="clamp_point" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="point" type="Vector3" />
+			<description>
+				[param point] moved into the outer union ([method pull_in]), then out of the inner one ([method push_out]). The inner union wins where they disagree.
+			</description>
+		</method>
+		<method name="clear_seat">
+			<return type="void" />
+			<description>
+				Removes the seat.
+			</description>
+		</method>
+		<method name="get_centres" qualifiers="const">
+			<return type="PackedVector3Array" />
+			<description>
+				Per piece, the centre of the sphere bounding it.
+			</description>
+		</method>
+		<method name="get_faults" qualifiers="const">
+			<return type="int" />
+			<description>
+				How many hanging vertices the last [method solve] left inside the inner union or under the seat.
+			</description>
+		</method>
+		<method name="get_largest" qualifiers="const">
+			<return type="float" />
+			<description>
+				The largest change the last pass of the last [method solve] made to an edge.
+			</description>
+		</method>
+		<method name="get_passes_run" qualifiers="const">
+			<return type="int" />
+			<description>
+				How many passes the last [method solve] ran.
+			</description>
+		</method>
+		<method name="get_radii" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<description>
+				Per piece, the radius of the sphere bounding it; [constant @GDScript.INF] for a piece with no corners.
+			</description>
+		</method>
+		<method name="in_footprint" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="point" type="Vector3" />
+			<description>
+				Whether [param point], projected onto the seat's plane, is within the footprint.
+			</description>
+		</method>
+		<method name="inside_inner" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="point" type="Vector3" />
+			<param index="1" name="tolerance" type="float" />
+			<description>
+				Whether [param point] is inside an inner piece by more than [param tolerance].
+			</description>
+		</method>
+		<method name="inside_outer" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="point" type="Vector3" />
+			<param index="1" name="tolerance" type="float" />
+			<description>
+				Whether [param point] is inside an outer piece, within [param tolerance]. Always [code]true[/code] when there is no outer piece.
+			</description>
+		</method>
+		<method name="on_seat" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="point" type="Vector3" />
+			<description>
+				[param point] lifted onto the seat when it is below it inside the footprint.
+			</description>
+		</method>
+		<method name="pull_in" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="point" type="Vector3" />
+			<description>
+				[param point], or the nearest point to it in the nearest outer piece when it is in none.
+			</description>
+		</method>
+		<method name="push_out" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="point" type="Vector3" />
+			<description>
+				[param point] moved out of every inner piece, through the nearest face whose far side is in no other piece.
+			</description>
+		</method>
+		<method name="set_hull">
+			<return type="void" />
+			<param index="0" name="planes" type="PackedVector4Array" />
+			<param index="1" name="piece_ends" type="PackedInt32Array" />
+			<param index="2" name="outer" type="PackedByteArray" />
+			<description>
+				Sets the pieces. [param planes] holds every piece's planes in turn: [code]xyz[/code] the outward normal and [code]w[/code] the offset, with the inside where the normal's dot product with a point is at most [code]w[/code]. [param piece_ends] gives the index past each piece's last plane, and [param outer] whether each piece is an outer one.
+			</description>
+		</method>
+		<method name="set_seat">
+			<return type="void" />
+			<param index="0" name="up" type="Vector3" />
+			<param index="1" name="level" type="float" />
+			<param index="2" name="footprint" type="PackedVector3Array" />
+			<param index="3" name="reaches" type="PackedFloat32Array" />
+			<description>
+				Sets the seat: the plane facing [param up] at height [param level] along it. It holds only within the footprint: within each [param reaches] of the segment between each pair of points in [param footprint], all projected onto the plane.
+			</description>
+		</method>
+		<method name="set_tuning">
+			<return type="void" />
+			<param index="0" name="skin" type="float" />
+			<param index="1" name="seat_skin" type="float" />
+			<param index="2" name="inner_passes" type="int" />
+			<param index="3" name="outer_passes" type="int" />
+			<description>
+				How far past a face a clamped point is put, how far above the seat a lifted point is put, how many times a point is pushed out of the inner union, and how many passes project a point onto an outer piece.
+			</description>
+		</method>
+		<method name="settle" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="point" type="Vector3" />
+			<description>
+				[param point] clamped ([method clamp_point]), then lifted onto the seat ([method on_seat]).
+			</description>
+		</method>
+		<method name="solve">
+			<return type="PackedVector3Array" />
+			<param index="0" name="rest" type="PackedVector3Array" />
+			<param index="1" name="start" type="PackedVector3Array" />
+			<param index="2" name="hanging" type="PackedFloat32Array" />
+			<param index="3" name="indices" type="PackedInt32Array" />
+			<param index="4" name="max_stretch" type="float" />
+			<param index="5" name="passes" type="int" />
+			<param index="6" name="settled" type="float" />
+			<param index="7" name="fault" type="float" />
+			<description>
+				Settles each vertex of [param start] whose [param hanging] is above [code]0[/code], then runs up to [param passes] passes. Each pass holds every edge of the triangles [param indices] between two vertices with [param hanging] [code]1[/code] between its length in [param rest] and [param max_stretch] times it, and settles again each vertex an edge moved. The passes end once no edge is more than [param settled] from its allowed length. Vertices with [param hanging] [code]0[/code] are returned as given. Hanging vertices left more than [param fault] inside the inner union or under the seat are counted ([method get_faults]).
+			</description>
+		</method>
+		<method name="under_seat" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="point" type="Vector3" />
+			<param index="1" name="tolerance" type="float" />
+			<description>
+				Whether [param point] is more than [param tolerance] below the seat inside the footprint.
+			</description>
+		</method>
+	</methods>
+</class>
