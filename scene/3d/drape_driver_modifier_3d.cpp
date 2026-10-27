@@ -83,7 +83,126 @@ void DrapeDriverModifier3D::set_seat_turns(const PackedVector4Array &p_seat_turn
 	}
 }
 
+void DrapeDriverModifier3D::set_pose_targets(const PackedInt32Array &p_bones, const PackedVector4Array &p_rests, const PackedVector4Array &p_targets,
+		const PackedFloat32Array &p_legs, const PackedInt32Array &p_knees, const PackedVector4Array &p_knee_rests,
+		const PackedVector3Array &p_shin_along, const Vector4 &p_hips_rest) {
+	clear_pose_targets();
+	const int n = p_bones.size();
+	ERR_FAIL_COND_MSG(p_rests.size() != n, "One rest per chain bone.");
+	ERR_FAIL_COND_MSG(p_legs.size() % 4 != 0 || (n == 0 ? p_targets.size() != 0 : p_targets.size() != n * (p_legs.size() / 4)),
+			"Four leg angles per variant, and a target per chain bone per variant.");
+	ERR_FAIL_COND_MSG(p_knees.size() != 2 || p_knee_rests.size() != 2 || p_shin_along.size() != 2, "Two knees, each with a rest and a direction.");
+	for (int i = 0; i < n; i++) {
+		pose_bones.push_back(p_bones[i]);
+		pose_rests.push_back(_quaternion_of(p_rests[i]));
+	}
+	for (int i = 0; i < p_targets.size(); i++) {
+		pose_targets.push_back(_quaternion_of(p_targets[i]));
+	}
+	for (int i = 0; i < p_legs.size(); i++) {
+		pose_legs.push_back(p_legs[i]);
+	}
+	pose_variants = n > 0 ? p_legs.size() / 4 : 0;
+	for (int k = 0; k < 2; k++) {
+		knees[k] = p_knees[k];
+		knee_rests[k] = _quaternion_of(p_knee_rests[k]);
+		shin_along[k] = p_shin_along[k];
+	}
+	hips_rest = _quaternion_of(p_hips_rest);
+	pose_tops.resize(tops.size());
+	pose_is_top.resize(n);
+	for (int i = 0; i < n; i++) {
+		pose_is_top[i] = 0;
+	}
+	for (uint32_t c = 0; c < tops.size(); c++) {
+		pose_tops[c] = -1;
+		for (int i = 0; i < n; i++) {
+			if (pose_bones[i] == tops[c]) {
+				pose_tops[c] = i;
+				pose_is_top[i] = 1;
+				break;
+			}
+		}
+	}
+}
+
+void DrapeDriverModifier3D::clear_pose_targets() {
+	pose_bones.clear();
+	pose_rests.clear();
+	pose_targets.clear();
+	pose_legs.clear();
+	pose_tops.clear();
+	pose_is_top.clear();
+	pose_variants = 0;
+	knees[0] = -1;
+	knees[1] = -1;
+	pose_variant = -1;
+	pose_weight = 0.0;
+	legs.clear();
+}
+
+void DrapeDriverModifier3D::set_pose_tuning(double p_from, double p_stray) {
+	pose_from = p_from;
+	pose_stray = p_stray;
+}
+
+double DrapeDriverModifier3D::side_angle(const Vector3 &p_v) {
+	return Math::atan2((double)p_v.z, (double)-p_v.y);
+}
+
+double DrapeDriverModifier3D::weigh_pose(const PackedFloat32Array &p_legs, const PackedFloat32Array &p_variant, double p_from, double p_stray) {
+	ERR_FAIL_COND_V(p_legs.size() < p_variant.size(), 0.0);
+	double length_squared = 0.0;
+	double along = 0.0;
+	for (int k = 0; k < p_variant.size(); k++) {
+		length_squared += p_variant[k] * p_variant[k];
+		along += p_legs[k] * p_variant[k];
+	}
+	if (length_squared < 1e-8) {
+		return 0.0;
+	}
+	const double t = along / length_squared;
+	double stray = 0.0;
+	for (int k = 0; k < p_variant.size(); k++) {
+		const double off = p_legs[k] - t * p_variant[k];
+		stray += off * off;
+	}
+	stray = Math::sqrt(stray / length_squared);
+	return Math::smoothstep(p_from, 1.0, t) * (1.0 - Math::smoothstep(p_stray, p_stray * 2.0, stray));
+}
+
+void DrapeDriverModifier3D::_measure_legs(Skeleton3D *p_skeleton) {
+	legs.resize(4);
+	float *out = legs.ptrw();
+	for (int k = 0; k < 2; k++) {
+		const Vector3 thigh = hips_rest.xform(p_skeleton->get_bone_pose_rotation(thighs[k]).xform(thigh_along[k]));
+		const Vector3 thigh_rest = hips_rest.xform(thigh_rests[k].xform(thigh_along[k]));
+		out[k] = side_angle(thigh) - side_angle(thigh_rest);
+		const Vector3 shin = p_skeleton->get_bone_pose_rotation(knees[k]).xform(shin_along[k]);
+		const Vector3 shin_rest = knee_rests[k].xform(shin_along[k]);
+		out[2 + k] = thigh_along[k].angle_to(shin) - thigh_along[k].angle_to(shin_rest);
+	}
+}
+
+void DrapeDriverModifier3D::_weigh_poses() {
+	pose_variant = -1;
+	pose_weight = 0.0;
+	PackedFloat32Array variant;
+	variant.resize(4);
+	for (int v = 0; v < pose_variants; v++) {
+		for (int k = 0; k < 4; k++) {
+			variant.set(k, pose_legs[v * 4 + k]);
+		}
+		const double w = weigh_pose(legs, variant, pose_from, pose_stray);
+		if (w > pose_weight) {
+			pose_weight = w;
+			pose_variant = v;
+		}
+	}
+}
+
 void DrapeDriverModifier3D::clear_layout() {
+	clear_pose_targets();
 	thighs.clear();
 	thigh_rests.clear();
 	thigh_along.clear();
@@ -213,6 +332,19 @@ void DrapeDriverModifier3D::_process_modification(double p_delta) {
 			bent[k] = Math::smoothstep((float)bend_from, (float)bend_to, along.angle_to(-up));
 		}
 	}
+	// How far the legs are into a pose variant's pose, and which: its targets
+	// shape the chains only while the springs swing them (§6.4), since the
+	// cloth that moves the garment off a seat keeps its own shape.
+	pose_variant = -1;
+	pose_weight = 0.0;
+	if (knees[0] >= 0 && knees[0] < bone_count && knees[1] >= 0 && knees[1] < bone_count) {
+		_measure_legs(skeleton);
+		SpringBoneSimulator3D *springs = ObjectDB::get_instance<SpringBoneSimulator3D>(springs_id);
+		if (pose_variants > 0 && springs && springs->is_active()) {
+			_weigh_poses();
+		}
+	}
+	const Quaternion *targets = pose_variant >= 0 ? pose_targets.ptr() + pose_variant * pose_bones.size() : nullptr;
 	Vector2 *applied_w = applied.ptrw();
 	for (uint32_t c = 0; c < tops.size(); c++) {
 		if (tops[c] < 0 || tops[c] >= bone_count) {
@@ -243,7 +375,22 @@ void DrapeDriverModifier3D::_process_modification(double p_delta) {
 				turned = Quaternion(lift_axis.normalized(), seat_lap_lift * lapped * laps[c] * (1.0f - press)) * turned;
 			}
 		}
-		skeleton->set_bone_pose_rotation(tops[c], turned * rests[c]);
+		Quaternion top = turned * rests[c];
+		// A pose's target takes the top as far as the legs are into it, but
+		// not a top the seat presses onto it.
+		if (targets && c < pose_tops.size() && pose_tops[c] >= 0) {
+			top = top.slerp(targets[pose_tops[c]], (float)pose_weight * (1.0f - press * (float)seated));
+		}
+		skeleton->set_bone_pose_rotation(tops[c], top);
+	}
+	if (targets) {
+		for (uint32_t i = 0; i < pose_bones.size(); i++) {
+			const int bone = pose_bones[i];
+			if (bone < 0 || bone >= bone_count || pose_is_top[i]) {
+				continue;
+			}
+			skeleton->set_bone_pose_rotation(bone, pose_rests[i].slerp(targets[i], (float)pose_weight));
+		}
 	}
 	// Here, inside the pass, the skeleton holds the tops just set: anywhere
 	// else it holds its rests, and the springs would hang from those.
@@ -319,6 +466,18 @@ Vector2 DrapeDriverModifier3D::get_bent() const {
 	return bent;
 }
 
+PackedFloat32Array DrapeDriverModifier3D::get_legs() const {
+	return legs;
+}
+
+int DrapeDriverModifier3D::get_pose_variant() const {
+	return pose_variant;
+}
+
+double DrapeDriverModifier3D::get_pose_weight() const {
+	return pose_weight;
+}
+
 void DrapeDriverModifier3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_layout", "thighs", "thigh_rests", "thigh_along", "tops", "rests", "shares", "weights", "downs", "outs", "seat_turns", "laps", "up"), &DrapeDriverModifier3D::set_layout);
 	ClassDB::bind_method(D_METHOD("clear_layout"), &DrapeDriverModifier3D::clear_layout);
@@ -337,9 +496,20 @@ void DrapeDriverModifier3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_applied"), &DrapeDriverModifier3D::get_applied);
 	ClassDB::bind_method(D_METHOD("set_bend", "from", "to"), &DrapeDriverModifier3D::set_bend);
 	ClassDB::bind_method(D_METHOD("get_bent"), &DrapeDriverModifier3D::get_bent);
+	ClassDB::bind_method(D_METHOD("set_pose_targets", "bones", "rests", "targets", "legs", "knees", "knee_rests", "shin_along", "hips_rest"), &DrapeDriverModifier3D::set_pose_targets);
+	ClassDB::bind_method(D_METHOD("clear_pose_targets"), &DrapeDriverModifier3D::clear_pose_targets);
+	ClassDB::bind_method(D_METHOD("set_pose_tuning", "from", "stray"), &DrapeDriverModifier3D::set_pose_tuning);
+	ClassDB::bind_static_method("DrapeDriverModifier3D", D_METHOD("weigh_pose", "legs", "variant", "from", "stray"), &DrapeDriverModifier3D::weigh_pose);
+	ClassDB::bind_static_method("DrapeDriverModifier3D", D_METHOD("side_angle", "v"), &DrapeDriverModifier3D::side_angle);
+	ClassDB::bind_method(D_METHOD("get_legs"), &DrapeDriverModifier3D::get_legs);
+	ClassDB::bind_method(D_METHOD("get_pose_variant"), &DrapeDriverModifier3D::get_pose_variant);
+	ClassDB::bind_method(D_METHOD("get_pose_weight"), &DrapeDriverModifier3D::get_pose_weight);
 
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "seated", PROPERTY_HINT_RANGE, "0,1,0.001", PROPERTY_USAGE_NONE), "set_seated", "get_seated");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hold", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "", "get_hold");
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_VECTOR2_ARRAY, "weights", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "", "get_weights");
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_VECTOR2_ARRAY, "applied", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "", "get_applied");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT32_ARRAY, "legs", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "", "get_legs");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "pose_variant", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "", "get_pose_variant");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "pose_weight", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "", "get_pose_weight");
 }

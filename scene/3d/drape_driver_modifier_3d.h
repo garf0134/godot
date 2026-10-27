@@ -87,16 +87,41 @@ class DrapeDriverModifier3D : public SkeletonModifier3D {
 	ObjectID wardrobe_id;
 	bool reset_springs = false;
 
+	// Pose targets (§6.4 there): every chain bone, its rest, and per pose
+	// variant its rotation in that pose, variant by variant; per variant its
+	// leg angles (both thighs' swings, then both knees' bends). Per column,
+	// its top's place among the bones (-1 for none).
+	LocalVector<int> pose_bones;
+	LocalVector<Quaternion> pose_rests;
+	LocalVector<Quaternion> pose_targets;
+	LocalVector<float> pose_legs;
+	LocalVector<int> pose_tops;
+	LocalVector<uint8_t> pose_is_top;
+	int pose_variants = 0;
+	// Per knee: bone, rest rotation, direction towards its foot; the hips'
+	// rest in the skeleton's space, the frame the angles are measured in.
+	int knees[2] = { -1, -1 };
+	Quaternion knee_rests[2];
+	Vector3 shin_along[2];
+	Quaternion hips_rest;
+	double pose_from = 0.3;
+	double pose_stray = 0.25;
+
 	// Read and written by the script; recorded by the pass.
 	double seated = 0.0;
 	double hold = 0.0;
 	PackedVector2Array applied;
 	Vector2 bent;
+	PackedFloat32Array legs;
+	int pose_variant = -1;
+	double pose_weight = 0.0;
 
 	static Quaternion _turn(const Quaternion &p_swing, float p_weight);
 	Quaternion _swing(Skeleton3D *p_skeleton, int p_k) const;
 	float _outward_weight(const Quaternion &p_swing, int p_c, float p_weight) const;
 	void _push_legs(Skeleton3D *p_skeleton);
+	void _measure_legs(Skeleton3D *p_skeleton);
+	void _weigh_poses();
 
 protected:
 	static void _bind_methods();
@@ -112,6 +137,13 @@ public:
 	void set_tuning(double p_max_stretch, double p_reversed_share, double p_seat_lap_lift, double p_hold_span, double p_hold_time);
 	void set_legs_layout(const PackedInt32Array &p_bones, const PackedVector3Array &p_ends, const PackedVector2Array &p_radii);
 	void set_bend(double p_from, double p_to);
+	void set_pose_targets(const PackedInt32Array &p_bones, const PackedVector4Array &p_rests, const PackedVector4Array &p_targets,
+			const PackedFloat32Array &p_legs, const PackedInt32Array &p_knees, const PackedVector4Array &p_knee_rests,
+			const PackedVector3Array &p_shin_along, const Vector4 &p_hips_rest);
+	void clear_pose_targets();
+	void set_pose_tuning(double p_from, double p_stray);
+	static double weigh_pose(const PackedFloat32Array &p_legs, const PackedFloat32Array &p_variant, double p_from, double p_stray);
+	static double side_angle(const Vector3 &p_v);
 
 	void set_rings_node(Node *p_rings);
 	void set_springs_node(Node *p_springs);
@@ -126,4 +158,7 @@ public:
 	PackedVector2Array get_weights() const;
 	PackedVector2Array get_applied() const;
 	Vector2 get_bent() const;
+	PackedFloat32Array get_legs() const;
+	int get_pose_variant() const;
+	double get_pose_weight() const;
 };

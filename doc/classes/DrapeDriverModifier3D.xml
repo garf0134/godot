@@ -15,6 +15,12 @@
 				Removes the chains' layout; the modifier then does nothing.
 			</description>
 		</method>
+		<method name="clear_pose_targets">
+			<return type="void" />
+			<description>
+				Removes the pose targets given by [method set_pose_targets].
+			</description>
+		</method>
 		<method name="compute_leg_capsules">
 			<return type="PackedVector4Array" />
 			<param index="0" name="skeleton" type="Skeleton3D" />
@@ -54,6 +60,28 @@
 			<param index="2" name="radii" type="PackedVector2Array" />
 			<description>
 				Sets the legs' capsules: per capsule its bone ([code]-1[/code] for none), its two ends in that bone's frame, and the radius at each end.
+			</description>
+		</method>
+		<method name="set_pose_targets">
+			<return type="void" />
+			<param index="0" name="bones" type="PackedInt32Array" />
+			<param index="1" name="rests" type="PackedVector4Array" />
+			<param index="2" name="targets" type="PackedVector4Array" />
+			<param index="3" name="legs" type="PackedFloat32Array" />
+			<param index="4" name="knees" type="PackedInt32Array" />
+			<param index="5" name="knee_rests" type="PackedVector4Array" />
+			<param index="6" name="shin_along" type="PackedVector3Array" />
+			<param index="7" name="hips_rest" type="Vector4" />
+			<description>
+				Sets the pose targets: every chain bone and its rest rotation, then per pose variant each bone's rotation in that pose (all of one variant's bones, then the next's) and the variant's four leg angles in radians (each thigh's swing forward from rest, left then right, seen from the side in the hips' frame, then each knee's bend from rest). [param knees] are the two knee bones, with their rest rotations and their directions towards the feet; [param hips_rest] is the hips' rest rotation in the skeleton's space. Call it after [method set_layout], which clears it. Each pass, while the [SpringBoneSimulator3D] given by [method set_springs_node] is active, the variant the legs are furthest into ([method weigh_pose]) turns every bone towards its target that far; a chain's top is turned from where the thighs and the seat put it, less as far as the seat presses it.
+			</description>
+		</method>
+		<method name="set_pose_tuning">
+			<return type="void" />
+			<param index="0" name="from" type="float" />
+			<param index="1" name="stray" type="float" />
+			<description>
+				The [code]from[/code] and [code]stray[/code] the pass gives [method weigh_pose].
 			</description>
 		</method>
 		<method name="set_rings_node">
@@ -96,6 +124,23 @@
 				The [GeometryInstance3D] given the legs' capsules each pass; [code]null[/code] for none.
 			</description>
 		</method>
+		<method name="side_angle" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="v" type="Vector3" />
+			<description>
+				[param v]'s angle forward of straight down, seen from the side: [code]atan2(v.z, -v.y)[/code].
+			</description>
+		</method>
+		<method name="weigh_pose" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="legs" type="PackedFloat32Array" />
+			<param index="1" name="variant" type="PackedFloat32Array" />
+			<param index="2" name="from" type="float" />
+			<param index="3" name="stray" type="float" />
+			<description>
+				How far leg angles [param legs] are into the pose a variant was recorded at, [param variant], from [code]0[/code] to [code]1[/code]: [code]t = legs·variant / variant·variant[/code], smoothstepped from [param from] to [code]1[/code], times how close [param legs] stay to [code]t * variant[/code], fading as that distance over [param variant]'s length goes from [param stray] to twice it.
+			</description>
+		</method>
 	</methods>
 	<members>
 		<member name="applied" type="PackedVector2Array" setter="" getter="get_applied">
@@ -103,6 +148,15 @@
 		</member>
 		<member name="hold" type="float" setter="" getter="get_hold">
 			How much extra follow the hold added on the last drawn pass, from [code]0[/code] to [code]1[/code].
+		</member>
+		<member name="legs" type="PackedFloat32Array" setter="" getter="get_legs">
+			The legs' angles on the last drawn pass, as [method set_pose_targets] takes a variant's; empty without pose targets.
+		</member>
+		<member name="pose_variant" type="int" setter="" getter="get_pose_variant">
+			The pose variant whose targets the last drawn pass turned towards, or [code]-1[/code] for none.
+		</member>
+		<member name="pose_weight" type="float" setter="" getter="get_pose_weight">
+			How far the last drawn pass turned towards [member pose_variant]'s targets, from [code]0[/code] to [code]1[/code].
 		</member>
 		<member name="seated" type="float" setter="set_seated" getter="get_seated">
 			How far into a seat the wearer is, from [code]0[/code] to [code]1[/code].
