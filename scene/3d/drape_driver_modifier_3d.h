@@ -69,6 +69,11 @@ class DrapeDriverModifier3D : public SkeletonModifier3D {
 	double seat_lap_lift = 0.0;
 	double hold_span = 0.1;
 	double hold_time = 0.15;
+	// The thigh's lift from straight down the hips, radians, over which a
+	// standing wearer's lap takes the seat's follow and lift (set_bend()); none
+	// when they are equal.
+	double bend_from = 0.0;
+	double bend_to = 0.0;
 
 	// Per leg capsule: bone, its ends in that bone's frame, its push radii.
 	LocalVector<int> leg_bones;
@@ -86,6 +91,7 @@ class DrapeDriverModifier3D : public SkeletonModifier3D {
 	double seated = 0.0;
 	double hold = 0.0;
 	PackedVector2Array applied;
+	Vector2 bent;
 
 	static Quaternion _turn(const Quaternion &p_swing, float p_weight);
 	Quaternion _swing(Skeleton3D *p_skeleton, int p_k) const;
@@ -105,6 +111,7 @@ public:
 	void set_seat_turns(const PackedVector4Array &p_seat_turns, const PackedFloat32Array &p_presses);
 	void set_tuning(double p_max_stretch, double p_reversed_share, double p_seat_lap_lift, double p_hold_span, double p_hold_time);
 	void set_legs_layout(const PackedInt32Array &p_bones, const PackedVector3Array &p_ends, const PackedVector2Array &p_radii);
+	void set_bend(double p_from, double p_to);
 
 	void set_rings_node(Node *p_rings);
 	void set_springs_node(Node *p_springs);
@@ -118,4 +125,5 @@ public:
 	double get_hold() const;
 	PackedVector2Array get_weights() const;
 	PackedVector2Array get_applied() const;
+	Vector2 get_bent() const;
 };

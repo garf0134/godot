@@ -107,6 +107,11 @@ void DrapeDriverModifier3D::set_tuning(double p_max_stretch, double p_reversed_s
 	hold_time = p_hold_time;
 }
 
+void DrapeDriverModifier3D::set_bend(double p_from, double p_to) {
+	bend_from = p_from;
+	bend_to = p_to;
+}
+
 void DrapeDriverModifier3D::set_legs_layout(const PackedInt32Array &p_bones, const PackedVector3Array &p_ends, const PackedVector2Array &p_radii) {
 	ERR_FAIL_COND_MSG(p_ends.size() != p_bones.size() * 2 || p_radii.size() != p_bones.size(), "Two ends and a pair of radii per leg capsule.");
 	leg_bones.clear();
@@ -198,6 +203,16 @@ void DrapeDriverModifier3D::_process_modification(double p_delta) {
 
 	const Quaternion swing_l = _swing(skeleton, 0);
 	const Quaternion swing_r = _swing(skeleton, 1);
+	// A thigh lifted far up the hips (bent over, a high stride) runs through the
+	// lap's columns as a seated one does, so the lap follows and lifts over it
+	// as far as it is lifted, seated or not.
+	bent = Vector2();
+	if (bend_to > bend_from) {
+		for (int k = 0; k < 2; k++) {
+			const Vector3 along = skeleton->get_bone_pose_rotation(thighs[k]).xform(thigh_along[k]);
+			bent[k] = Math::smoothstep((float)bend_from, (float)bend_to, along.angle_to(-up));
+		}
+	}
 	Vector2 *applied_w = applied.ptrw();
 	for (uint32_t c = 0; c < tops.size(); c++) {
 		if (tops[c] < 0 || tops[c] >= bone_count) {
@@ -207,8 +222,12 @@ void DrapeDriverModifier3D::_process_modification(double p_delta) {
 		// A column pressed onto the seat lies along it: it neither follows the
 		// thighs nor lifts over them.
 		const float press = c < presses.size() ? presses[c] : 0.0f;
+		const float share_sum = shares[c].x + shares[c].y;
+		const float lapped = MAX((float)seated, share_sum > 0.0f ? (shares[c].x * bent.x + shares[c].y * bent.y) / share_sum : 0.0f);
+		if (lapped > 0.0f) {
+			w = w.lerp(shares[c], lapped * laps[c]);
+		}
 		if (seated > 0.0) {
-			w = w.lerp(shares[c], seated * laps[c]);
 			w = w.lerp(Vector2(), seated * press);
 		}
 		const float w_l = _outward_weight(swing_l, c, w.x);
@@ -217,9 +236,11 @@ void DrapeDriverModifier3D::_process_modification(double p_delta) {
 		Quaternion turned = _turn(swing_l, w_l) * _turn(swing_r, w_r);
 		if (seated > 0.0) {
 			turned = Quaternion().slerp(seat_turns[c], seated) * turned;
+		}
+		if (lapped > 0.0f && laps[c] > 0.0f) {
 			const Vector3 lift_axis = turned.xform(downs[c]).cross(up);
-			if (laps[c] > 0.0f && lift_axis.length_squared() > 1e-8f) {
-				turned = Quaternion(lift_axis.normalized(), seat_lap_lift * seated * laps[c] * (1.0f - press)) * turned;
+			if (lift_axis.length_squared() > 1e-8f) {
+				turned = Quaternion(lift_axis.normalized(), seat_lap_lift * lapped * laps[c] * (1.0f - press)) * turned;
 			}
 		}
 		skeleton->set_bone_pose_rotation(tops[c], turned * rests[c]);
@@ -294,6 +315,10 @@ PackedVector2Array DrapeDriverModifier3D::get_applied() const {
 	return applied;
 }
 
+Vector2 DrapeDriverModifier3D::get_bent() const {
+	return bent;
+}
+
 void DrapeDriverModifier3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_layout", "thighs", "thigh_rests", "thigh_along", "tops", "rests", "shares", "weights", "downs", "outs", "seat_turns", "laps", "up"), &DrapeDriverModifier3D::set_layout);
 	ClassDB::bind_method(D_METHOD("clear_layout"), &DrapeDriverModifier3D::clear_layout);
@@ -310,6 +335,8 @@ void DrapeDriverModifier3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_hold"), &DrapeDriverModifier3D::get_hold);
 	ClassDB::bind_method(D_METHOD("get_weights"), &DrapeDriverModifier3D::get_weights);
 	ClassDB::bind_method(D_METHOD("get_applied"), &DrapeDriverModifier3D::get_applied);
+	ClassDB::bind_method(D_METHOD("set_bend", "from", "to"), &DrapeDriverModifier3D::set_bend);
+	ClassDB::bind_method(D_METHOD("get_bent"), &DrapeDriverModifier3D::get_bent);
 
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "seated", PROPERTY_HINT_RANGE, "0,1,0.001", PROPERTY_USAGE_NONE), "set_seated", "get_seated");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hold", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "", "get_hold");
