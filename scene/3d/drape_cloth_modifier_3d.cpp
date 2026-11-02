@@ -183,8 +183,15 @@ bool DrapeClothModifier3D::_read(Skeleton3D *p_skeleton, const Transform3D &p_ce
 			for (uint32_t p = 0; p < bones.size(); p++) {
 				particle_allowance[p * m + k] = _depth(rest[p], rest[p], at_rest);
 			}
+			// A link through the inner half of a capsule at rest is never
+			// collided with it (-1): it crosses close by the capsule's axis,
+			// where which way out is nearest swings from one pass to the next
+			// as the leg turns, and pushed that way it threw the cloth about
+			// in a walk. Its particles are still kept out of the leg.
+			const float deep = 0.5f * MIN(at_rest.radius_a, at_rest.radius_b);
 			for (uint32_t l = 0; l < links.size(); l++) {
-				link_allowance[l * m + k] = _depth(rest[links[l].a], rest[links[l].b], at_rest);
+				const float depth = _depth(rest[links[l].a], rest[links[l].b], at_rest);
+				link_allowance[l * m + k] = depth > deep ? -1.0f : depth;
 			}
 		}
 		measured = true;
@@ -356,7 +363,7 @@ void DrapeClothModifier3D::_collide(int p_particle, const Capsule &p_capsule, fl
 void DrapeClothModifier3D::_collide_link(int p_a, int p_b, const Capsule &p_capsule, float p_allowance) {
 	const float w_a = mass_inverse[p_a];
 	const float w_b = mass_inverse[p_b];
-	if (w_a == 0.0f && w_b == 0.0f) {
+	if ((w_a == 0.0f && w_b == 0.0f) || p_allowance < 0.0f) {
 		return;
 	}
 	Vector3 on_link;
@@ -381,9 +388,15 @@ void DrapeClothModifier3D::_collide_link(int p_a, int p_b, const Capsule &p_caps
 	if (sum < 1e-8f) {
 		return;
 	}
-	const float scale = (radius - d) / sum;
-	x[p_a] += normal * (scale * s_a);
-	x[p_b] += normal * (scale * s_b);
+	// Neither end goes further than the contact is deep. Near a pinned top the
+	// other end alone would turn the link clear, by the depth over how far
+	// along it the contact is: tens of centimetres in one pass for a thigh
+	// at the top of a column, which the cloth could never move back from
+	// smoothly.
+	const float depth = radius - d;
+	const float scale = depth / sum;
+	x[p_a] += normal * MIN(scale * s_a, depth);
+	x[p_b] += normal * MIN(scale * s_b, depth);
 }
 
 void DrapeClothModifier3D::_write(Skeleton3D *p_skeleton, const Transform3D &p_center) {

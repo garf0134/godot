@@ -39,6 +39,10 @@
 #include "scene/main/scene_tree.h"
 #include "servers/rendering/rendering_server.h"
 
+// How far inward a swing carries a column (the cosine of its push with the
+// column's outward) before it is followed wholly reversed.
+static const float INWARD_BAND = 0.5f;
+
 static Quaternion _quaternion_of(const Vector4 &p_v) {
 	return Quaternion(p_v.x, p_v.y, p_v.z, p_v.w);
 }
@@ -286,7 +290,18 @@ float DrapeDriverModifier3D::_outward_weight(const Quaternion &p_swing, int p_c,
 		return 0.0f;
 	}
 	const Vector3 down = downs[p_c];
-	return (p_swing.xform(down) - down).dot(outs[p_c]) < 0.0f ? -p_weight * (float)reversed_share : p_weight;
+	const Vector3 moved = p_swing.xform(down) - down;
+	const float length = moved.length();
+	if (length < 1e-6f) {
+		return p_weight;
+	}
+	// Followed whole while the swing carries the column out or along the
+	// body, reversed as it turns inward. A swing along the body (a thigh
+	// coming forward, under a column at the side) is where the two meet:
+	// switched there, a side column turned a whole share and a half the
+	// other way in one pass, mid-stride.
+	const float inward = Math::smoothstep(0.0f, INWARD_BAND, -moved.dot(outs[p_c]) / length);
+	return p_weight * Math::lerp(1.0f, -(float)reversed_share, inward);
 }
 
 void DrapeDriverModifier3D::_process_modification(double p_delta) {

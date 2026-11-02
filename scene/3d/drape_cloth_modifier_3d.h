@@ -43,8 +43,10 @@
 // (cloth modelled tight to a leg, or a column between the legs whose links
 // to its neighbours cross a thigh) may stay that deep in it and is pushed
 // only past that, so the cloth is never shoved off the shape it was
-// modelled in. Each joint is drawn toward its hang in the pose, strongly at
-// the top and fading to the hem; gravity has the rest. It is simulated in the
+// modelled in; a link through the inner half of a capsule at rest is not
+// collided with it at all, its particles alone kept out. Each joint is drawn
+// toward its hang in the pose, strongly at the top and fading to the hem;
+// gravity has the rest. It is simulated in the
 // center bone's frame, so travel through the world does not swing it. The
 // layout is built by a script.
 class DrapeClothModifier3D : public SkeletonModifier3D {
