@@ -42,6 +42,8 @@
 // How far inward a swing carries a column (the cosine of its push with the
 // column's outward) before it is followed wholly reversed.
 static const float INWARD_BAND = 0.5f;
+// compute_pelvis()'s packing, DrapeSeatedTarget.PACK_STEPS.
+static const float PELVIS_STEPS = 4095.0f;
 
 static Quaternion _quaternion_of(const Vector4 &p_v) {
 	return Quaternion(p_v.x, p_v.y, p_v.z, p_v.w);
@@ -253,6 +255,34 @@ void DrapeDriverModifier3D::set_legs_layout(const PackedInt32Array &p_bones, con
 	capsules.fill(Vector4());
 }
 
+void DrapeDriverModifier3D::set_pelvis_bone(int p_bone) {
+	pelvis_bone = p_bone;
+}
+
+// The hips' centre in the wardrobe mesh's space, and in w the upright of
+// the rest pose as the hips carry it, packed as DrapeSeatedTarget.
+// pack_normal() packs (octahedral, PELVIS_STEPS a side); w -1 for none.
+Vector4 DrapeDriverModifier3D::compute_pelvis(Skeleton3D *p_skeleton, Node *p_wardrobe) const {
+	Node3D *wardrobe = Object::cast_to<Node3D>(p_wardrobe);
+	ERR_FAIL_NULL_V(p_skeleton, Vector4(0, 0, 0, -1));
+	ERR_FAIL_NULL_V(wardrobe, Vector4(0, 0, 0, -1));
+	if (pelvis_bone < 0 || pelvis_bone >= p_skeleton->get_bone_count()) {
+		return Vector4(0, 0, 0, -1);
+	}
+	const Transform3D to_mesh = wardrobe->get_global_transform().affine_inverse() * p_skeleton->get_global_transform();
+	const Transform3D pose = p_skeleton->get_bone_global_pose(pelvis_bone);
+	const Vector3 centre = to_mesh.xform(pose.origin);
+	const Basis carried = pose.basis * p_skeleton->get_bone_global_rest(pelvis_bone).basis.inverse();
+	Vector3 n = to_mesh.basis.xform(carried.xform(Vector3(0, 1, 0)));
+	n /= MAX(Math::abs(n.x) + Math::abs(n.y) + Math::abs(n.z), 1e-12f);
+	Vector2 e(n.x, n.y);
+	if (n.z < 0.0f) {
+		e = Vector2((1.0f - Math::abs(n.y)) * (n.x >= 0.0f ? 1.0f : -1.0f), (1.0f - Math::abs(n.x)) * (n.y >= 0.0f ? 1.0f : -1.0f));
+	}
+	const Vector2 q = ((e * 0.5f + Vector2(0.5f, 0.5f)) * PELVIS_STEPS).round();
+	return Vector4(centre.x, centre.y, centre.z, q.x * (PELVIS_STEPS + 1.0f) + q.y);
+}
+
 void DrapeDriverModifier3D::set_rings_node(Node *p_rings) {
 	rings_id = p_rings ? p_rings->get_instance_id() : ObjectID();
 }
@@ -456,6 +486,7 @@ void DrapeDriverModifier3D::_push_legs(Skeleton3D *p_skeleton) {
 	for (int i = 0; i < capsules.size(); i++) {
 		rs->instance_geometry_set_shader_parameter(instance, leg_params[i], capsules[i]);
 	}
+	rs->instance_geometry_set_shader_parameter(instance, pelvis_param, compute_pelvis(p_skeleton, wardrobe));
 }
 
 void DrapeDriverModifier3D::set_seated_hips(int p_bone, const Transform3D &p_bind, Node *p_wardrobe) {
@@ -540,6 +571,8 @@ void DrapeDriverModifier3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_wardrobe_node", "wardrobe"), &DrapeDriverModifier3D::set_wardrobe_node);
 	ClassDB::bind_method(D_METHOD("reset_springs_in_pass"), &DrapeDriverModifier3D::reset_springs_in_pass);
 	ClassDB::bind_method(D_METHOD("compute_leg_capsules", "skeleton", "wardrobe"), &DrapeDriverModifier3D::compute_leg_capsules);
+	ClassDB::bind_method(D_METHOD("set_pelvis_bone", "bone"), &DrapeDriverModifier3D::set_pelvis_bone);
+	ClassDB::bind_method(D_METHOD("compute_pelvis", "skeleton", "wardrobe"), &DrapeDriverModifier3D::compute_pelvis);
 	ClassDB::bind_method(D_METHOD("set_seated_hips", "bone", "bind", "wardrobe"), &DrapeDriverModifier3D::set_seated_hips);
 	ClassDB::bind_static_method("DrapeDriverModifier3D", D_METHOD("compute_seated_hips", "skeleton", "bone", "bind", "wardrobe"), &DrapeDriverModifier3D::compute_seated_hips);
 	ClassDB::bind_method(D_METHOD("set_seated", "seated"), &DrapeDriverModifier3D::set_seated);

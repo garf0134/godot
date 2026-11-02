@@ -81,6 +81,10 @@ class DrapeDriverModifier3D : public SkeletonModifier3D {
 	LocalVector<Vector2> leg_radii;
 	LocalVector<StringName> leg_params;
 	PackedVector4Array capsules;
+	// The hips, whose upright line hanging cloth is pushed out of a leg
+	// away from (compute_pelvis()); -1 for none.
+	int pelvis_bone = -1;
+	StringName pelvis_param = StringName("drape_pelvis");
 
 	ObjectID rings_id;
 	ObjectID springs_id;
@@ -144,6 +148,8 @@ public:
 	void clear_layout();
 	void set_seat_turns(const PackedVector4Array &p_seat_turns, const PackedFloat32Array &p_presses);
 	void set_tuning(double p_max_stretch, double p_reversed_share, double p_seat_lap_lift, double p_hold_span, double p_hold_time);
+	void set_pelvis_bone(int p_bone);
+	Vector4 compute_pelvis(Skeleton3D *p_skeleton, Node *p_wardrobe) const;
 	void set_legs_layout(const PackedInt32Array &p_bones, const PackedVector3Array &p_ends, const PackedVector2Array &p_radii);
 	void set_bend(double p_from, double p_to);
 	void set_pose_targets(const PackedInt32Array &p_bones, const PackedVector4Array &p_rests, const PackedVector4Array &p_targets,
