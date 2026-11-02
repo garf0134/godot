@@ -99,6 +99,8 @@ void DrapeClothModifier3D::set_colliders(const PackedInt32Array &p_bones, const 
 		capsules.push_back(capsule);
 	}
 	placed.resize(capsules.size());
+	// The allowances are measured against these.
+	measured = false;
 }
 
 void DrapeClothModifier3D::clear_layout() {
@@ -165,6 +167,25 @@ bool DrapeClothModifier3D::_read(Skeleton3D *p_skeleton, const Transform3D &p_ce
 		}
 		for (uint32_t k = 0; k < links.size(); k++) {
 			links[k].rest = rest[links[k].a].distance_to(rest[links[k].b]);
+		}
+		// And how deep each sits in each capsule there, with the thickness
+		// the pass collides at.
+		const uint32_t m = capsules.size();
+		particle_allowance.resize(bones.size() * m);
+		link_allowance.resize(links.size() * m);
+		for (uint32_t k = 0; k < m; k++) {
+			const Transform3D pose = p_skeleton->get_bone_global_rest(capsules[k].bone);
+			Capsule at_rest = capsules[k];
+			at_rest.a = pose.xform(capsules[k].a);
+			at_rest.b = pose.xform(capsules[k].b);
+			at_rest.radius_a += thickness;
+			at_rest.radius_b += thickness;
+			for (uint32_t p = 0; p < bones.size(); p++) {
+				particle_allowance[p * m + k] = _depth(rest[p], rest[p], at_rest);
+			}
+			for (uint32_t l = 0; l < links.size(); l++) {
+				link_allowance[l * m + k] = _depth(rest[links[l].a], rest[links[l].b], at_rest);
+			}
 		}
 		measured = true;
 	}
@@ -245,6 +266,7 @@ void DrapeClothModifier3D::_step(const Transform3D &p_center, double p_delta) {
 		}
 	}
 	const float stiffness[3] = { 1.0f, (float)ring_stiffness, (float)shear_stiffness };
+	const uint32_t m = placed.size();
 	for (int it = 0; it < iterations; it++) {
 		for (uint32_t k = 0; k < links.size(); k++) {
 			const Link &link = links[k];
@@ -277,7 +299,7 @@ void DrapeClothModifier3D::_step(const Transform3D &p_center, double p_delta) {
 			for (uint32_t p = 0; p < n; p++) {
 				const Vector3 &q = x[p];
 				if (mass_inverse[p] > 0.0f && q.x >= low.x && q.y >= low.y && q.z >= low.z && q.x <= high.x && q.y <= high.y && q.z <= high.z) {
-					_collide(p, capsule);
+					_collide(p, capsule, particle_allowance[p * m + k]);
 				}
 			}
 			for (uint32_t l = 0; l < links.size(); l++) {
@@ -288,7 +310,7 @@ void DrapeClothModifier3D::_step(const Transform3D &p_center, double p_delta) {
 						(q0.z < low.z && q1.z < low.z) || (q0.z > high.z && q1.z > high.z)) {
 					continue;
 				}
-				_collide_link(links[l].a, links[l].b, capsule);
+				_collide_link(links[l].a, links[l].b, capsule, link_allowance[l * m + k]);
 			}
 		}
 	}
@@ -305,12 +327,24 @@ void DrapeClothModifier3D::_step(const Transform3D &p_center, double p_delta) {
 	}
 }
 
-void DrapeClothModifier3D::_collide(int p_particle, const Capsule &p_capsule) {
+// How far inside `p_capsule` the segment from `p_a` to `p_b` reaches at its
+// nearest (a point when the two are one): 0 outside it.
+float DrapeClothModifier3D::_depth(const Vector3 &p_a, const Vector3 &p_b, const Capsule &p_capsule) {
+	Vector3 on_segment;
+	Vector3 on_axis;
+	Geometry3D::get_closest_points_between_segments(p_a, p_b, p_capsule.a, p_capsule.b, on_segment, on_axis);
+	const Vector3 axis = p_capsule.b - p_capsule.a;
+	const float t = CLAMP((on_axis - p_capsule.a).dot(axis) / MAX(axis.dot(axis), 1e-8f), 0.0f, 1.0f);
+	const float radius = Math::lerp(p_capsule.radius_a, p_capsule.radius_b, t);
+	return MAX(radius - on_segment.distance_to(on_axis), 0.0f);
+}
+
+void DrapeClothModifier3D::_collide(int p_particle, const Capsule &p_capsule, float p_allowance) {
 	const Vector3 &a = p_capsule.a;
 	const Vector3 axis = p_capsule.b - a;
 	const Vector3 p = x[p_particle];
 	const float t = CLAMP((p - a).dot(axis) / MAX(axis.dot(axis), 1e-8f), 0.0f, 1.0f);
-	const float radius = Math::lerp(p_capsule.radius_a, p_capsule.radius_b, t);
+	const float radius = Math::lerp(p_capsule.radius_a, p_capsule.radius_b, t) - p_allowance;
 	const Vector3 nearest = a + axis * t;
 	const float d = p.distance_to(nearest);
 	if (d >= radius || d < 1e-6f) {
@@ -319,7 +353,7 @@ void DrapeClothModifier3D::_collide(int p_particle, const Capsule &p_capsule) {
 	x[p_particle] = nearest + (p - nearest) * (radius / d);
 }
 
-void DrapeClothModifier3D::_collide_link(int p_a, int p_b, const Capsule &p_capsule) {
+void DrapeClothModifier3D::_collide_link(int p_a, int p_b, const Capsule &p_capsule, float p_allowance) {
 	const float w_a = mass_inverse[p_a];
 	const float w_b = mass_inverse[p_b];
 	if (w_a == 0.0f && w_b == 0.0f) {
@@ -330,7 +364,7 @@ void DrapeClothModifier3D::_collide_link(int p_a, int p_b, const Capsule &p_caps
 	Geometry3D::get_closest_points_between_segments(x[p_a], x[p_b], p_capsule.a, p_capsule.b, on_link, on_axis);
 	const Vector3 axis = p_capsule.b - p_capsule.a;
 	const float t_axis = CLAMP((on_axis - p_capsule.a).dot(axis) / MAX(axis.dot(axis), 1e-8f), 0.0f, 1.0f);
-	const float radius = Math::lerp(p_capsule.radius_a, p_capsule.radius_b, t_axis);
+	const float radius = Math::lerp(p_capsule.radius_a, p_capsule.radius_b, t_axis) - p_allowance;
 	const Vector3 apart = on_link - on_axis;
 	const float d = apart.length();
 	if (d >= radius || d < 1e-6f) {

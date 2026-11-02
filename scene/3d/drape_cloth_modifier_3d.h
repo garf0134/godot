@@ -39,8 +39,12 @@
 // their length), round each ring and diagonally to the ring above (held
 // from stretching, free to gather), and the body's capsules push out the
 // particles and every link between them, so a leg cannot pass between two
-// columns. Each joint is drawn toward its hang in the pose, strongly at the
-// top and fading to the hem; gravity has the rest. It is simulated in the
+// columns. A particle or link already inside a capsule in the rest pose
+// (cloth modelled tight to a leg, or a column between the legs whose links
+// to its neighbours cross a thigh) may stay that deep in it and is pushed
+// only past that, so the cloth is never shoved off the shape it was
+// modelled in. Each joint is drawn toward its hang in the pose, strongly at
+// the top and fading to the hem; gravity has the rest. It is simulated in the
 // center bone's frame, so travel through the world does not swing it. The
 // layout is built by a script.
 class DrapeClothModifier3D : public SkeletonModifier3D {
@@ -81,6 +85,11 @@ private:
 		float radius_b = 0.0;
 	};
 	LocalVector<Capsule> capsules;
+	// How deep each particle and each link sits in each capsule at rest
+	// (particle or link major, a capsule's slot within it): it may stay that
+	// deep. Measured with the link lengths.
+	LocalVector<float> particle_allowance;
+	LocalVector<float> link_allowance;
 
 	int iterations = 4;
 	double top_pull = 1.0;
@@ -108,8 +117,9 @@ private:
 
 	bool _read(Skeleton3D *p_skeleton, const Transform3D &p_center);
 	void _step(const Transform3D &p_center, double p_delta);
-	void _collide(int p_particle, const Capsule &p_capsule);
-	void _collide_link(int p_a, int p_b, const Capsule &p_capsule);
+	void _collide(int p_particle, const Capsule &p_capsule, float p_allowance);
+	void _collide_link(int p_a, int p_b, const Capsule &p_capsule, float p_allowance);
+	static float _depth(const Vector3 &p_a, const Vector3 &p_b, const Capsule &p_capsule);
 	void _write(Skeleton3D *p_skeleton, const Transform3D &p_center);
 
 protected:
