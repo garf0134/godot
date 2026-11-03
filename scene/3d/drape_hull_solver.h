@@ -52,6 +52,10 @@ class DrapeHullSolver : public RefCounted {
 	LocalVector<Plane> planes;
 	LocalVector<Piece> pieces;
 	bool any_outer = false;
+	// Per piece, from rest to where it is fitted (its bone's pose): in
+	// solve(), a point in an inner piece leaves it toward where its rest
+	// place is carried, the side it came from. Empty for none.
+	LocalVector<Transform3D> carries;
 
 	bool has_seat = false;
 	Vector3 seat_up = Vector3(0, 1, 0);
@@ -75,6 +79,8 @@ class DrapeHullSolver : public RefCounted {
 	bool _contains(const Piece &p_piece, const Vector3 &p_point, real_t p_tolerance) const;
 	bool _near(const Piece &p_piece, const Vector3 &p_point, real_t p_margin) const;
 	Vector3 _project(const Piece &p_piece, const Vector3 &p_point) const;
+	Vector3 _push_out(const Vector3 &p_point, const Vector3 *p_rest) const;
+	Vector3 _settle(const Vector3 &p_point, const Vector3 *p_rest) const;
 
 protected:
 	static void _bind_methods();
@@ -85,6 +91,7 @@ public:
 	void clear_seat();
 	void set_floor(real_t p_level);
 	void set_tuning(real_t p_skin, real_t p_seat_skin, int p_inner_passes, int p_outer_passes);
+	void set_carries(const Array &p_carries);
 
 	PackedVector3Array get_centres() const;
 	PackedFloat32Array get_radii() const;

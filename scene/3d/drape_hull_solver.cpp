@@ -35,6 +35,12 @@
 #include "core/templates/hash_set.h"
 #include "core/templates/pair.h"
 
+// How much further a face turned right away from the side a point came from
+// is counted (_push_out()), as a share of how deep the point is under its
+// nearest face: near a piece's axis the side decides, and at its skin, where
+// that depth is nothing, the nearest face does.
+static constexpr real_t SIDE_BIAS = 1.0;
+
 void DrapeHullSolver::set_hull(const PackedVector4Array &p_planes, const PackedInt32Array &p_piece_ends, const PackedByteArray &p_outer) {
 	planes.clear();
 	pieces.clear();
@@ -107,6 +113,13 @@ void DrapeHullSolver::set_tuning(real_t p_skin, real_t p_seat_skin, int p_inner_
 	seat_skin = p_seat_skin;
 	inner_passes = MAX(p_inner_passes, 1);
 	outer_passes = MAX(p_outer_passes, 1);
+}
+
+void DrapeHullSolver::set_carries(const Array &p_carries) {
+	carries.clear();
+	for (int k = 0; k < p_carries.size(); k++) {
+		carries.push_back(p_carries[k]);
+	}
 }
 
 PackedVector3Array DrapeHullSolver::get_centres() const {
@@ -195,20 +208,42 @@ bool DrapeHullSolver::inside_outer(const Vector3 &p_point, real_t p_tolerance) c
 // face leads into another piece, through the nearest face, and again from
 // there.
 Vector3 DrapeHullSolver::push_out(const Vector3 &p_point) const {
+	return _push_out(p_point, nullptr);
+}
+
+// push_out(), but with p_rest (the point's rest place, given set_carries())
+// a point leaves each piece by the face nearest it, counting a face as
+// further the more it is turned from where that piece carries the point's
+// rest place: in a thigh's piece, near its axis, faces either side are
+// about as near, and neighbouring cloth took opposite ones, a row out past
+// the thigh and the next between the legs.
+Vector3 DrapeHullSolver::_push_out(const Vector3 &p_point, const Vector3 *p_rest) const {
 	Vector3 p = p_point;
 	for (int pass = 0; pass < inner_passes; pass++) {
 		Vector3 best = p;
 		real_t best_distance = Math::INF;
 		Vector3 fallback = p;
 		real_t fallback_distance = Math::INF;
-		for (const Piece &piece : pieces) {
+		for (uint32_t k = 0; k < pieces.size(); k++) {
+			const Piece &piece = pieces[k];
 			if (piece.outer || !_near(piece, p, 0.0) || !_contains(piece, p, 0.0)) {
 				continue;
+			}
+			Vector3 way;
+			real_t shallowest = 0.0;
+			if (p_rest != nullptr && k < carries.size()) {
+				way = carries[k].xform(*p_rest) - p;
+				const real_t length = way.length();
+				way = length > CMP_EPSILON ? way / length : Vector3();
+				shallowest = Math::INF;
+				for (int i = piece.start; i < piece.end; i++) {
+					shallowest = MIN(shallowest, -planes[i].distance_to(p));
+				}
 			}
 			for (int i = piece.start; i < piece.end; i++) {
 				const real_t depth = planes[i].distance_to(p);
 				const Vector3 q = p + planes[i].normal * (skin - depth);
-				const real_t distance = -depth;
+				const real_t distance = -depth + (way == Vector3() ? 0.0 : SIDE_BIAS * shallowest * 0.5 * (1.0 - planes[i].normal.dot(way)));
 				if (distance < fallback_distance) {
 					fallback_distance = distance;
 					fallback = q;
@@ -306,7 +341,11 @@ Vector3 DrapeHullSolver::on_seat(const Vector3 &p_point) const {
 // Into the band, then onto the seat: the seat wins, as cloth cannot pass
 // through it whatever the hull says.
 Vector3 DrapeHullSolver::settle(const Vector3 &p_point) const {
-	return on_seat(clamp_point(p_point));
+	return _settle(p_point, nullptr);
+}
+
+Vector3 DrapeHullSolver::_settle(const Vector3 &p_point, const Vector3 *p_rest) const {
+	return on_seat(_push_out(pull_in(p_point), p_rest));
 }
 
 // The cloth from p_start (one point per vertex) settled, then kept whole:
@@ -326,9 +365,10 @@ PackedVector3Array DrapeHullSolver::solve(const PackedVector3Array &p_rest, cons
 	PackedVector3Array out = p_start;
 	Vector3 *moved = out.ptrw();
 	const real_t *hanging = p_hanging.ptr();
+	const Vector3 *rest = p_rest.ptr();
 	for (int v = 0; v < n; v++) {
 		if (hanging[v] > 0.0) {
-			moved[v] = settle(moved[v]);
+			moved[v] = _settle(moved[v], rest + v);
 		}
 	}
 
@@ -387,7 +427,7 @@ PackedVector3Array DrapeHullSolver::solve(const PackedVector3Array &p_rest, cons
 		// last pass left them.
 		for (int v = 0; v < n; v++) {
 			if (touched[v] && hanging[v] > 0.0) {
-				moved[v] = settle(moved[v]);
+				moved[v] = _settle(moved[v], rest + v);
 			}
 		}
 		if (largest < p_settled) {
@@ -408,6 +448,7 @@ void DrapeHullSolver::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("clear_seat"), &DrapeHullSolver::clear_seat);
 	ClassDB::bind_method(D_METHOD("set_floor", "level"), &DrapeHullSolver::set_floor);
 	ClassDB::bind_method(D_METHOD("set_tuning", "skin", "seat_skin", "inner_passes", "outer_passes"), &DrapeHullSolver::set_tuning);
+	ClassDB::bind_method(D_METHOD("set_carries", "carries"), &DrapeHullSolver::set_carries);
 	ClassDB::bind_method(D_METHOD("get_centres"), &DrapeHullSolver::get_centres);
 	ClassDB::bind_method(D_METHOD("get_radii"), &DrapeHullSolver::get_radii);
 	ClassDB::bind_method(D_METHOD("clamp_point", "point"), &DrapeHullSolver::clamp_point);
