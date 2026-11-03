@@ -396,6 +396,20 @@ PackedVector3Array DrapeHullSolver::solve(const PackedVector3Array &p_rest, cons
 			lengths.push_back(p_rest[a].distance_to(p_rest[b]));
 		}
 	}
+	// And the faces between it, whose middles and edges' middles are held out
+	// of the inner union as their corners are: stretched over a knee, a face
+	// with every corner clear cut 6 cm into it.
+	LocalVector<int> faces;
+	for (int t = 0; t + 2 < p_indices.size(); t += 3) {
+		const int a = indices[t];
+		const int b = indices[t + 1];
+		const int c = indices[t + 2];
+		if (a >= 0 && b >= 0 && c >= 0 && a < n && b < n && c < n && hanging[a] >= 1.0 && hanging[b] >= 1.0 && hanging[c] >= 1.0) {
+			faces.push_back(a);
+			faces.push_back(b);
+			faces.push_back(c);
+		}
+	}
 
 	LocalVector<uint8_t> touched;
 	touched.resize(n);
@@ -422,6 +436,36 @@ PackedVector3Array DrapeHullSolver::solve(const PackedVector3Array &p_rest, cons
 			touched[a] = 1;
 			touched[b] = 1;
 			largest = MAX(largest, Math::abs(change));
+		}
+		// A face's middle, or an edge's, inside the inner union moves its
+		// corners out with it, by the side its rest place came from.
+		for (uint32_t f = 0; f < faces.size(); f += 3) {
+			const int corner[3] = { faces[f], faces[f + 1], faces[f + 2] };
+			for (int k = 0; k < 4; k++) {
+				// Each edge's middle, then the face's.
+				const int i = k == 3 ? -1 : k;
+				const int j = k == 3 ? -1 : (k + 1) % 3;
+				Vector3 at;
+				Vector3 from;
+				if (i < 0) {
+					at = (moved[corner[0]] + moved[corner[1]] + moved[corner[2]]) / 3.0;
+					from = (rest[corner[0]] + rest[corner[1]] + rest[corner[2]]) / 3.0;
+				} else {
+					at = (moved[corner[i]] + moved[corner[j]]) * 0.5;
+					from = (rest[corner[i]] + rest[corner[j]]) * 0.5;
+				}
+				if (!inside_inner(at, 0.0)) {
+					continue;
+				}
+				const Vector3 by = _push_out(at, &from) - at;
+				for (int m = 0; m < 3; m++) {
+					if (i < 0 || m == i || m == j) {
+						moved[corner[m]] += by;
+						touched[corner[m]] = 1;
+					}
+				}
+				largest = MAX(largest, by.length());
+			}
 		}
 		// Re-settled only where an edge moved it: the rest are where the
 		// last pass left them.
