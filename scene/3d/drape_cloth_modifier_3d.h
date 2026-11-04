@@ -92,6 +92,19 @@ private:
 	// deep. Measured with the link lengths.
 	LocalVector<float> particle_allowance;
 	LocalVector<float> link_allowance;
+	// A particle held near a leg (two capsules, the thigh's and the
+	// shin's): no further than tether_slack from where it hung at rest,
+	// carried by whichever of the two bones it was nearer at rest (`bone`,
+	// `local` in its frame, measured with the allowances); `target` is that
+	// place in the pass's pose, in the center bone's frame.
+	struct Tether {
+		int particle = 0;
+		int legs[2] = { 0, 0 };
+		int bone = -1;
+		Vector3 local;
+		Vector3 target;
+	};
+	LocalVector<Tether> tethers;
 
 	int iterations = 4;
 	double top_pull = 1.0;
@@ -104,6 +117,8 @@ private:
 	double snap_distance = 0.15;
 	double max_speed = 0.0;
 	bool keep_sides = false;
+	double tether_slack = 0.05;
+	double tether_stiffness = 1.0;
 
 	// Pass state, in the center bone's frame.
 	bool measured = false;
@@ -127,6 +142,7 @@ private:
 	void _collide(int p_particle, const Capsule &p_capsule, float p_allowance);
 	void _collide_link(int p_a, int p_b, const Capsule &p_capsule, float p_allowance);
 	static float _depth(const Vector3 &p_a, const Vector3 &p_b, const Capsule &p_capsule);
+	static Vector3 _on_axis(const Vector3 &p_point, const Capsule &p_capsule);
 	void _write(Skeleton3D *p_skeleton, const Transform3D &p_center);
 
 protected:
@@ -136,6 +152,7 @@ protected:
 public:
 	void set_layout(int p_center_bone, const PackedInt32Array &p_bones, const PackedInt32Array &p_parents, const PackedFloat32Array &p_tip_lengths, const PackedInt32Array &p_links);
 	void set_colliders(const PackedInt32Array &p_bones, const PackedVector3Array &p_ends, const PackedVector2Array &p_radii);
+	void set_tethers(const PackedInt32Array &p_particles, const PackedInt32Array &p_legs);
 	void clear_layout();
 	void reset();
 
@@ -161,6 +178,10 @@ public:
 	double get_max_speed() const;
 	void set_keep_sides(bool p_keep);
 	bool is_keeping_sides() const;
+	void set_tether_slack(double p_slack);
+	double get_tether_slack() const;
+	void set_tether_stiffness(double p_stiffness);
+	double get_tether_stiffness() const;
 
 	int get_resets() const;
 	PackedVector3Array get_particles() const;

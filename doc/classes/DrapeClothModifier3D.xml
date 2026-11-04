@@ -53,6 +53,14 @@
 				The particles, chain by chain from top to tip: per particle its bone ([code]-1[/code] for a tip past the bone before it), the particle above it ([code]-1[/code] for a chain's pinned top, otherwise the particle listed before it), and a tip's length. [param links] has three ints per link: its two particles and its [enum LinkKind]. Link lengths are measured from the bones' rests on the first pass.
 			</description>
 		</method>
+		<method name="set_tethers">
+			<return type="void" />
+			<param index="0" name="particles" type="PackedInt32Array" />
+			<param index="1" name="legs" type="PackedInt32Array" />
+			<description>
+				Particles held near a leg, as a slit's edge is: per particle, two capsules of [method set_colliders] in [param legs] (a thigh's and a shin's). Where the particle hangs at rest is kept in the frame of the bone whose capsule's axis it is nearer, and each iteration draws the particle back toward that place, carried by the bone, wherever it is further from it than [member tether_slack]. Call after [method set_layout]; [method clear_layout] clears them.
+			</description>
+		</method>
 	</methods>
 	<members>
 		<member name="damping" type="float" setter="set_damping" getter="get_damping" default="0.04">
@@ -81,6 +89,12 @@
 		</member>
 		<member name="snap_distance" type="float" setter="set_snap_distance" getter="get_snap_distance" default="0.15">
 			A joint just below a pinned top moving more than this in one pass, in the center bone's frame (a pose restored, a cut in the animation), starts the cloth over from the pose. The joints further down are not watched: a stride may swing them that far.
+		</member>
+		<member name="tether_slack" type="float" setter="set_tether_slack" getter="get_tether_slack" default="0.05">
+			How far a tethered particle (see [method set_tethers]) may swing from where it hangs at rest, carried by its leg. Below 0, the tethers hold nothing.
+		</member>
+		<member name="tether_stiffness" type="float" setter="set_tether_stiffness" getter="get_tether_stiffness" default="1.0">
+			The share of the way past [member tether_slack] a tethered particle is drawn back each iteration.
 		</member>
 		<member name="thickness" type="float" setter="set_thickness" getter="get_thickness" default="0.015">
 			Added to every capsule's radius.

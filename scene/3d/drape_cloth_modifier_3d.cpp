@@ -104,6 +104,21 @@ void DrapeClothModifier3D::set_colliders(const PackedInt32Array &p_bones, const 
 	measured = false;
 }
 
+void DrapeClothModifier3D::set_tethers(const PackedInt32Array &p_particles, const PackedInt32Array &p_legs) {
+	tethers.clear();
+	ERR_FAIL_COND_MSG(p_legs.size() != p_particles.size() * 2, "Two capsules (a leg's thigh and shin) per tethered particle.");
+	for (int k = 0; k < p_particles.size(); k++) {
+		ERR_FAIL_COND_MSG(p_particles[k] < 0 || p_particles[k] >= (int)bones.size(), "A tether names a particle that is not there.");
+		Tether tether;
+		tether.particle = p_particles[k];
+		tether.legs[0] = p_legs[k * 2];
+		tether.legs[1] = p_legs[k * 2 + 1];
+		tethers.push_back(tether);
+	}
+	// Each one's place on its leg is measured at rest, with the allowances.
+	measured = false;
+}
+
 void DrapeClothModifier3D::clear_layout() {
 	center_bone = -1;
 	bones.clear();
@@ -113,6 +128,7 @@ void DrapeClothModifier3D::clear_layout() {
 	column_start.clear();
 	column_size.clear();
 	links.clear();
+	tethers.clear();
 	measured = false;
 	started = false;
 }
@@ -151,6 +167,11 @@ bool DrapeClothModifier3D::_read(Skeleton3D *p_skeleton, const Transform3D &p_ce
 	}
 	for (uint32_t k = 0; k < capsules.size(); k++) {
 		if (capsules[k].bone < 0 || capsules[k].bone >= bone_count) {
+			return false;
+		}
+	}
+	for (const Tether &tether : tethers) {
+		if (tether.legs[0] < 0 || tether.legs[0] >= (int)capsules.size() || tether.legs[1] < 0 || tether.legs[1] >= (int)capsules.size()) {
 			return false;
 		}
 	}
@@ -193,6 +214,23 @@ bool DrapeClothModifier3D::_read(Skeleton3D *p_skeleton, const Transform3D &p_ce
 			for (uint32_t l = 0; l < links.size(); l++) {
 				const float depth = _depth(rest[links[l].a], rest[links[l].b], at_rest);
 				link_allowance[l * m + k] = depth > deep ? -1.0f : depth;
+			}
+		}
+		// Where each tethered particle hangs, in the frame of the leg bone
+		// whose capsule's axis it is nearer.
+		for (Tether &tether : tethers) {
+			float nearest = 1e30f;
+			for (int leg : tether.legs) {
+				const Transform3D pose = p_skeleton->get_bone_global_rest(capsules[leg].bone);
+				Capsule at_rest = capsules[leg];
+				at_rest.a = pose.xform(capsules[leg].a);
+				at_rest.b = pose.xform(capsules[leg].b);
+				const float d = rest[tether.particle].distance_to(_on_axis(rest[tether.particle], at_rest));
+				if (d < nearest) {
+					nearest = d;
+					tether.bone = capsules[leg].bone;
+					tether.local = pose.affine_inverse().xform(rest[tether.particle]);
+				}
 			}
 		}
 		measured = true;
@@ -242,6 +280,9 @@ bool DrapeClothModifier3D::_read(Skeleton3D *p_skeleton, const Transform3D &p_ce
 		placed[k].b = pose.xform(capsules[k].b);
 		placed[k].radius_a = capsules[k].radius_a + thickness;
 		placed[k].radius_b = capsules[k].radius_b + thickness;
+	}
+	for (Tether &tether : tethers) {
+		tether.target = (to_center * p_skeleton->get_bone_global_pose(tether.bone)).xform(tether.local);
 	}
 	return true;
 }
@@ -314,6 +355,24 @@ void DrapeClothModifier3D::_step(const Transform3D &p_center, double p_delta) {
 			x[link.a] += fix * mass_inverse[link.a];
 			x[link.b] -= fix * mass_inverse[link.b];
 		}
+		// A tethered particle further than the slack from where it hung at
+		// rest, carried by its leg, is drawn back toward that place: nothing
+		// round a ring holds a slit's edge, and it trailed a striding leg by
+		// 20 cm. Drawn toward the leg's axis instead, the edge pulled the ring
+		// tight round the leg, and the back of the hem caught behind a heel
+		// and slipped off it 15 cm in a pass.
+		for (uint32_t k = 0; k < tethers.size() && tether_slack >= 0.0; k++) {
+			const Tether &tether = tethers[k];
+			const int p = tether.particle;
+			if (mass_inverse[p] == 0.0f) {
+				continue;
+			}
+			const float d = x[p].distance_to(tether.target);
+			if (d > (float)tether_slack) {
+				const Vector3 held = tether.target + (x[p] - tether.target) * ((float)tether_slack / d);
+				x[p] = x[p].lerp(held, (float)tether_stiffness);
+			}
+		}
 		for (uint32_t k = 0; k < placed.size(); k++) {
 			const Capsule &capsule = placed[k];
 			// Most of the cloth is nowhere near a given leg: a box round the
@@ -356,6 +415,13 @@ void DrapeClothModifier3D::_step(const Transform3D &p_center, double p_delta) {
 	for (uint32_t p = 0; p < n; p++) {
 		hang_before[p] = hang[p];
 	}
+}
+
+// The point of `p_capsule`'s axis nearest `p_point`.
+Vector3 DrapeClothModifier3D::_on_axis(const Vector3 &p_point, const Capsule &p_capsule) {
+	const Vector3 axis = p_capsule.b - p_capsule.a;
+	const float t = CLAMP((p_point - p_capsule.a).dot(axis) / MAX(axis.dot(axis), 1e-8f), 0.0f, 1.0f);
+	return p_capsule.a + axis * t;
 }
 
 // How far inside `p_capsule` the segment from `p_a` to `p_b` reaches at its
@@ -562,6 +628,22 @@ double DrapeClothModifier3D::get_max_speed() const {
 	return max_speed;
 }
 
+void DrapeClothModifier3D::set_tether_slack(double p_slack) {
+	tether_slack = p_slack;
+}
+
+double DrapeClothModifier3D::get_tether_slack() const {
+	return tether_slack;
+}
+
+void DrapeClothModifier3D::set_tether_stiffness(double p_stiffness) {
+	tether_stiffness = CLAMP(p_stiffness, 0.0, 1.0);
+}
+
+double DrapeClothModifier3D::get_tether_stiffness() const {
+	return tether_stiffness;
+}
+
 void DrapeClothModifier3D::set_keep_sides(bool p_keep) {
 	keep_sides = p_keep;
 }
@@ -586,6 +668,7 @@ PackedVector3Array DrapeClothModifier3D::get_particles() const {
 void DrapeClothModifier3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_layout", "center_bone", "bones", "parents", "tip_lengths", "links"), &DrapeClothModifier3D::set_layout);
 	ClassDB::bind_method(D_METHOD("set_colliders", "bones", "ends", "radii"), &DrapeClothModifier3D::set_colliders);
+	ClassDB::bind_method(D_METHOD("set_tethers", "particles", "legs"), &DrapeClothModifier3D::set_tethers);
 	ClassDB::bind_method(D_METHOD("clear_layout"), &DrapeClothModifier3D::clear_layout);
 	ClassDB::bind_method(D_METHOD("reset"), &DrapeClothModifier3D::reset);
 	ClassDB::bind_method(D_METHOD("set_iterations", "iterations"), &DrapeClothModifier3D::set_iterations);
@@ -608,6 +691,10 @@ void DrapeClothModifier3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_snap_distance"), &DrapeClothModifier3D::get_snap_distance);
 	ClassDB::bind_method(D_METHOD("set_max_speed", "speed"), &DrapeClothModifier3D::set_max_speed);
 	ClassDB::bind_method(D_METHOD("get_max_speed"), &DrapeClothModifier3D::get_max_speed);
+	ClassDB::bind_method(D_METHOD("set_tether_slack", "slack"), &DrapeClothModifier3D::set_tether_slack);
+	ClassDB::bind_method(D_METHOD("get_tether_slack"), &DrapeClothModifier3D::get_tether_slack);
+	ClassDB::bind_method(D_METHOD("set_tether_stiffness", "stiffness"), &DrapeClothModifier3D::set_tether_stiffness);
+	ClassDB::bind_method(D_METHOD("get_tether_stiffness"), &DrapeClothModifier3D::get_tether_stiffness);
 	ClassDB::bind_method(D_METHOD("set_keep_sides", "keep"), &DrapeClothModifier3D::set_keep_sides);
 	ClassDB::bind_method(D_METHOD("is_keeping_sides"), &DrapeClothModifier3D::is_keeping_sides);
 	ClassDB::bind_method(D_METHOD("get_resets"), &DrapeClothModifier3D::get_resets);
@@ -624,6 +711,8 @@ void DrapeClothModifier3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snap_distance", PROPERTY_HINT_RANGE, "0,1,0.001,or_greater,suffix:m"), "set_snap_distance", "get_snap_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_speed", PROPERTY_HINT_RANGE, "0,20,0.01,or_greater,suffix:m/s"), "set_max_speed", "get_max_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "keep_sides"), "set_keep_sides", "is_keeping_sides");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "tether_slack", PROPERTY_HINT_RANGE, "-0.01,0.3,0.001,or_greater,suffix:m"), "set_tether_slack", "get_tether_slack");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "tether_stiffness", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_tether_stiffness", "get_tether_stiffness");
 
 	BIND_ENUM_CONSTANT(LINK_COLUMN);
 	BIND_ENUM_CONSTANT(LINK_RING);
