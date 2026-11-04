@@ -77,6 +77,7 @@ void DrapeClothModifier3D::set_layout(int p_center_bone, const PackedInt32Array 
 	x.resize(n);
 	previous.resize(n);
 	hang.resize(n);
+	hang_before.resize(n);
 	mass_inverse.resize(n);
 	input_rotation.resize(n);
 	input_origin.resize(n);
@@ -231,6 +232,7 @@ bool DrapeClothModifier3D::_read(Skeleton3D *p_skeleton, const Transform3D &p_ce
 		for (uint32_t p = 0; p < bones.size(); p++) {
 			x[p] = hang[p];
 			previous[p] = hang[p];
+			hang_before[p] = hang[p];
 		}
 		started = true;
 	}
@@ -270,6 +272,23 @@ void DrapeClothModifier3D::_step(const Transform3D &p_center, double p_delta) {
 			const float pull = Math::lerp((float)top_pull, (float)hem_pull, CLAMP(share, 0.0f, 1.0f));
 			const Vector3 target = x[p - 1] + (hang[p] - hang[p - 1]);
 			x[p] = x[p].lerp(target, pull);
+		}
+	}
+	// Nothing but the legs moves a particle further in a pass than max_speed
+	// (when above 0) takes it, past how far its hang moved. Its swing and its
+	// pull toward the hang carried a hem joint past a leg's axis in a pass,
+	// and the leg then put it out its far side: 20 cm in one pass. The legs'
+	// push is left whole, or a particle the pose starts inside one stays in it.
+	const float most = (float)(max_speed * p_delta);
+	for (uint32_t p = 0; p < n && max_speed > 0.0; p++) {
+		if (mass_inverse[p] == 0.0f) {
+			continue;
+		}
+		const Vector3 carried = hang[p] - hang_before[p];
+		const Vector3 moved = x[p] - previous[p] - carried;
+		const float length = moved.length();
+		if (length > most) {
+			x[p] = previous[p] + carried + moved * (most / length);
 		}
 	}
 	const float stiffness[3] = { 1.0f, (float)ring_stiffness, (float)shear_stiffness };
@@ -332,6 +351,11 @@ void DrapeClothModifier3D::_step(const Transform3D &p_center, double p_delta) {
 			}
 		}
 	}
+	// Kept from step to step, not pass to pass: a pass with no time elapsed
+	// takes no step, and the next one is carried by the pose's motion since.
+	for (uint32_t p = 0; p < n; p++) {
+		hang_before[p] = hang[p];
+	}
 }
 
 // How far inside `p_capsule` the segment from `p_a` to `p_b` reaches at its
@@ -357,6 +381,22 @@ void DrapeClothModifier3D::_collide(int p_particle, const Capsule &p_capsule, fl
 	if (d >= radius || d < 1e-6f) {
 		return;
 	}
+	// Out on the side of the leg it started the pass on (keep_sides): past the
+	// axis, the nearest way out is through the leg's far side, and a joint the
+	// legs carried there in one pass jumped across them.
+	if (keep_sides) {
+		const Vector3 was = previous[p_particle];
+		const float tw = CLAMP((was - a).dot(axis) / MAX(axis.dot(axis), 1e-8f), 0.0f, 1.0f);
+		Vector3 side = was - (a + axis * tw);
+		side -= axis * (side.dot(axis) / MAX(axis.dot(axis), 1e-8f));
+		Vector3 off = p - nearest;
+		if (side.length_squared() > 1e-10f && off.dot(side) < 0.0f) {
+			// Across the axis from where it was: back over, then out.
+			off -= side.normalized() * (2.0f * off.dot(side.normalized()));
+			x[p_particle] = nearest + off.normalized() * radius;
+			return;
+		}
+	}
 	x[p_particle] = nearest + (p - nearest) * (radius / d);
 }
 
@@ -377,7 +417,20 @@ void DrapeClothModifier3D::_collide_link(int p_a, int p_b, const Capsule &p_caps
 	if (d >= radius || d < 1e-6f) {
 		return;
 	}
-	const Vector3 normal = apart / d;
+	Vector3 normal = apart / d;
+	// A link across the axis from where it started the pass goes back out on
+	// its own side (keep_sides), past the axis and out again, not through.
+	float flip_depth = 0.0f;
+	if (keep_sides) {
+		Vector3 was_link;
+		Vector3 was_axis;
+		Geometry3D::get_closest_points_between_segments(previous[p_a], previous[p_b], p_capsule.a, p_capsule.b, was_link, was_axis);
+		const Vector3 side = was_link - was_axis;
+		if (side.length_squared() > 1e-10f && normal.dot(side) < 0.0f) {
+			normal = side.normalized();
+			flip_depth = d + d;
+		}
+	}
 	const Vector3 link = x[p_b] - x[p_a];
 	const float t = CLAMP((on_link - x[p_a]).dot(link) / MAX(link.dot(link), 1e-8f), 0.0f, 1.0f);
 	// Each end moved by its share of the contact, weighted by where along the
@@ -393,7 +446,7 @@ void DrapeClothModifier3D::_collide_link(int p_a, int p_b, const Capsule &p_caps
 	// along it the contact is: tens of centimetres in one pass for a thigh
 	// at the top of a column, which the cloth could never move back from
 	// smoothly.
-	const float depth = radius - d;
+	const float depth = radius - d + flip_depth;
 	const float scale = depth / sum;
 	x[p_a] += normal * MIN(scale * s_a, depth);
 	x[p_b] += normal * MIN(scale * s_b, depth);
@@ -501,6 +554,22 @@ double DrapeClothModifier3D::get_snap_distance() const {
 	return snap_distance;
 }
 
+void DrapeClothModifier3D::set_max_speed(double p_speed) {
+	max_speed = MAX(p_speed, 0.0);
+}
+
+double DrapeClothModifier3D::get_max_speed() const {
+	return max_speed;
+}
+
+void DrapeClothModifier3D::set_keep_sides(bool p_keep) {
+	keep_sides = p_keep;
+}
+
+bool DrapeClothModifier3D::is_keeping_sides() const {
+	return keep_sides;
+}
+
 int DrapeClothModifier3D::get_resets() const {
 	return resets;
 }
@@ -537,6 +606,10 @@ void DrapeClothModifier3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_thickness"), &DrapeClothModifier3D::get_thickness);
 	ClassDB::bind_method(D_METHOD("set_snap_distance", "distance"), &DrapeClothModifier3D::set_snap_distance);
 	ClassDB::bind_method(D_METHOD("get_snap_distance"), &DrapeClothModifier3D::get_snap_distance);
+	ClassDB::bind_method(D_METHOD("set_max_speed", "speed"), &DrapeClothModifier3D::set_max_speed);
+	ClassDB::bind_method(D_METHOD("get_max_speed"), &DrapeClothModifier3D::get_max_speed);
+	ClassDB::bind_method(D_METHOD("set_keep_sides", "keep"), &DrapeClothModifier3D::set_keep_sides);
+	ClassDB::bind_method(D_METHOD("is_keeping_sides"), &DrapeClothModifier3D::is_keeping_sides);
 	ClassDB::bind_method(D_METHOD("get_resets"), &DrapeClothModifier3D::get_resets);
 	ClassDB::bind_method(D_METHOD("get_particles"), &DrapeClothModifier3D::get_particles);
 
@@ -549,6 +622,8 @@ void DrapeClothModifier3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "shear_stiffness", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_shear_stiffness", "get_shear_stiffness");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "thickness", PROPERTY_HINT_RANGE, "0,0.1,0.001,or_greater,suffix:m"), "set_thickness", "get_thickness");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snap_distance", PROPERTY_HINT_RANGE, "0,1,0.001,or_greater,suffix:m"), "set_snap_distance", "get_snap_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_speed", PROPERTY_HINT_RANGE, "0,20,0.01,or_greater,suffix:m/s"), "set_max_speed", "get_max_speed");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "keep_sides"), "set_keep_sides", "is_keeping_sides");
 
 	BIND_ENUM_CONSTANT(LINK_COLUMN);
 	BIND_ENUM_CONSTANT(LINK_RING);

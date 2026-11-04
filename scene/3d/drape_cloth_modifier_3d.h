@@ -102,6 +102,8 @@ private:
 	double shear_stiffness = 0.3;
 	double thickness = 0.015;
 	double snap_distance = 0.15;
+	double max_speed = 0.0;
+	bool keep_sides = false;
 
 	// Pass state, in the center bone's frame.
 	bool measured = false;
@@ -110,6 +112,9 @@ private:
 	LocalVector<Vector3> x;
 	LocalVector<Vector3> previous;
 	LocalVector<Vector3> hang;
+	// Each particle's hang at the last step, so a step can tell how far the
+	// pose itself moved it.
+	LocalVector<Vector3> hang_before;
 	LocalVector<float> mass_inverse;
 	LocalVector<Capsule> placed;
 	LocalVector<Quaternion> input_rotation;
@@ -152,6 +157,10 @@ public:
 	double get_thickness() const;
 	void set_snap_distance(double p_distance);
 	double get_snap_distance() const;
+	void set_max_speed(double p_speed);
+	double get_max_speed() const;
+	void set_keep_sides(bool p_keep);
+	bool is_keeping_sides() const;
 
 	int get_resets() const;
 	PackedVector3Array get_particles() const;

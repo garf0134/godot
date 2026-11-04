@@ -67,6 +67,12 @@
 		<member name="iterations" type="int" setter="set_iterations" getter="get_iterations" default="4">
 			How many times each pass the links and capsules are satisfied in turn.
 		</member>
+		<member name="keep_sides" type="bool" setter="set_keep_sides" getter="is_keeping_sides" default="false">
+			If [code]true[/code], a particle or link a pass carried across a capsule's axis is put back out on the side it started the pass on, not through the capsule's far side.
+		</member>
+		<member name="max_speed" type="float" setter="set_max_speed" getter="get_max_speed" default="0.0">
+			Above 0, the furthest a particle's own motion and its pull toward the hang take it in a second, past how far its hang moved. The capsules' push is not limited.
+		</member>
 		<member name="ring_stiffness" type="float" setter="set_ring_stiffness" getter="get_ring_stiffness" default="0.5">
 			The share of a stretched ring link's excess taken out each iteration.
 		</member>
