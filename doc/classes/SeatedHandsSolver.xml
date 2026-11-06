@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="SeatedHandsSolver" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Rests a seated character's palms on its thighs and lays its fingers along them.
+	</brief_description>
+	<description>
+		Holds a body's measured thighs (a profile of the skin's distance round each thigh bone) and palms, set by [method set_thigh] and [method set_palm], and reads a character's animated skeleton ([method set_skeleton], [method set_bone]). [method solve] finds the hand's target on its thigh and the weight its gap asks for; [method search_fingers], [method ease_fingers] and [method lay_fingers] turn each finger joint about the knuckle line so the next joint sits its pad's thickness off the thigh. Side 0 is the left, 1 the right.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="carry" qualifiers="const">
+			<return type="Transform3D" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="hand" type="bool" />
+			<description>
+				Takes a point at the side's thigh bone's (or with [param hand], hand bone's) skinned rest to where the animated skeleton's pose has it.
+			</description>
+		</method>
+		<method name="clear_fingers">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<description>
+				Forgets the side's searched and shown finger turns: the next search is shown at once.
+			</description>
+		</method>
+		<method name="clip" qualifiers="const">
+			<return type="Transform3D" />
+			<param index="0" name="side" type="int" />
+			<description>
+				The animated hand in its thigh's rest frame.
+			</description>
+		</method>
+		<method name="ease_fingers">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="share" type="float" />
+			<param index="2" name="limit" type="float" />
+			<description>
+				Moves each shown finger turn [param share] of the way to its searched one, by at most [param limit] radians. The first search after a clear is shown at once.
+			</description>
+		</method>
+		<method name="gap" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="point" type="Vector3" />
+			<description>
+				How far [param point], in the thigh's rest frame, is outside the side's thigh profile; negative inside.
+			</description>
+		</method>
+		<method name="get_finger_angles" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<param index="0" name="side" type="int" />
+			<description>
+				The side's last searched finger turns, three a finger, knuckle to tip.
+			</description>
+		</method>
+		<method name="get_finger_shown" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<param index="0" name="side" type="int" />
+			<description>
+				The side's finger turns as laid, eased toward the searched ones.
+			</description>
+		</method>
+		<method name="get_hand" qualifiers="const">
+			<return type="Transform3D" />
+			<description>
+				The last solve's resting hand bone, in the skinned skeleton's space.
+			</description>
+		</method>
+		<method name="get_ik_target" qualifiers="const">
+			<return type="Transform3D" />
+			<description>
+				The last solve's hand target in the animated skeleton's hand bone's frame; the same as [method get_hand] after [method solve_carried] or [method reapply_carried].
+			</description>
+		</method>
+		<method name="get_move" qualifiers="const">
+			<return type="Transform3D" />
+			<description>
+				The last solve's correction, a rigid move in the thigh's rest frame, for [method reapply_carried] or [method solve] without [code]full[/code].
+			</description>
+		</method>
+		<method name="get_outward" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The thigh's outward where the last full solve's wrist landed: the next solve's warm start.
+			</description>
+		</method>
+		<method name="get_palm_gap" qualifiers="const">
+			<return type="float" />
+			<description>
+				The animated palm point's gap to the thigh's skin.
+			</description>
+		</method>
+		<method name="get_roll" qualifiers="const">
+			<return type="float" />
+			<description>
+				The animated palm's roll against the thigh, radians; 0 after a reapply.
+			</description>
+		</method>
+		<method name="get_tilt" qualifiers="const">
+			<return type="float" />
+			<description>
+				The animated hand's tilt off the thigh, radians; 0 after a reapply.
+			</description>
+		</method>
+		<method name="get_weight" qualifiers="const">
+			<return type="float" />
+			<description>
+				The weight the last solve's palm gap asks for: 1 within [code]contact_full[/code], 0 past [code]contact_none[/code], and 0 for a hand pointing back up its thigh.
+			</description>
+		</method>
+		<method name="has_finger_angles" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="side" type="int" />
+			<description>
+				Whether the side's fingers have been searched since they were last cleared.
+			</description>
+		</method>
+		<method name="has_fingers" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="side" type="int" />
+			<description>
+				Whether [method set_finger_bones] gave the side's hand.
+			</description>
+		</method>
+		<method name="lay_fingers">
+			<return type="float" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="weight" type="float" />
+			<description>
+				Turns each of the side's finger joints by its shown turn times [param weight] on its current local rotation; returns the summed turn, radians.
+			</description>
+		</method>
+		<method name="reapply_carried">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="thigh_carry" type="Transform3D" />
+			<param index="2" name="hand_carry" type="Transform3D" />
+			<param index="3" name="hand_rest" type="Transform3D" />
+			<param index="4" name="move" type="Transform3D" />
+			<description>
+				An earlier solve's [param move] carried on the given pose: the weight and gap read afresh.
+			</description>
+		</method>
+		<method name="search_fingers">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<description>
+				Searches each finger joint's turn from the skeleton's pose as it stands. Reads only; [method lay_fingers] writes.
+			</description>
+		</method>
+		<method name="set_bone">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="hand" type="bool" />
+			<param index="2" name="index" type="int" />
+			<param index="3" name="rest_turn" type="Basis" />
+			<param index="4" name="skinned_rest" type="Transform3D" />
+			<param index="5" name="to_general" type="Basis" />
+			<description>
+				The side's thigh (or with [param hand], hand) bone: its index on the animated skeleton, the turn from that skeleton's rest to the skinned one's, the skinned rest, and the turn back.
+			</description>
+		</method>
+		<method name="set_finger_angles">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="angles" type="PackedFloat32Array" />
+			<description>
+				Sets the side's searched finger turns, as if searched.
+			</description>
+		</method>
+		<method name="set_finger_bones">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="hand" type="int" />
+			<param index="2" name="middle" type="int" />
+			<param index="3" name="index" type="int" />
+			<param index="4" name="little" type="int" />
+			<param index="5" name="bones" type="PackedInt32Array" />
+			<description>
+				The side's hand and the middle, index and little fingers' first joints on the animated skeleton, and each resting finger's three joints, knuckle to tip.
+			</description>
+		</method>
+		<method name="set_palm">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="wrist" type="Vector3" />
+			<param index="2" name="knuckle" type="Vector3" />
+			<param index="3" name="normal" type="Vector3" />
+			<param index="4" name="point" type="Vector3" />
+			<param index="5" name="contacts" type="PackedVector3Array" />
+			<param index="6" name="finger_pad" type="float" />
+			<description>
+				The side's palm at rest, in the skinned skeleton's space: its wrist and middle knuckle, the normal it faces, the point that rests, the contact points none of which may sink, and the fingers' pad thickness.
+			</description>
+		</method>
+		<method name="set_skeleton">
+			<return type="void" />
+			<param index="0" name="skeleton" type="Skeleton3D" />
+			<description>
+				The animated skeleton the bones are read from and the fingers laid on.
+			</description>
+		</method>
+		<method name="set_thigh">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="from" type="Vector3" />
+			<param index="2" name="axis" type="Vector3" />
+			<param index="3" name="front" type="Vector3" />
+			<param index="4" name="profile" type="PackedFloat32Array" />
+			<description>
+				The side's thigh at rest: its axis from the hip joint to the knee, its front, and the skin's distance from the axis per cell, section-major.
+			</description>
+		</method>
+		<method name="set_tuning">
+			<return type="void" />
+			<param index="0" name="tuning" type="Dictionary" />
+			<description>
+				Sets any of the solver's tuning by name: [code]sections[/code], [code]sectors[/code], [code]profile_from[/code], [code]profile_to[/code], [code]contact_full[/code], [code]contact_none[/code], [code]max_side_angle[/code], [code]max_palm_roll[/code], [code]palm_clearance[/code], [code]resolve_passes[/code], [code]converged[/code], [code]max_extend[/code], [code]max_flex[/code], [code]max_drape[/code], [code]relaxed_bend[/code], [code]tip_share[/code], [code]newton_steps[/code], [code]contact_tolerance[/code].
+			</description>
+		</method>
+		<method name="solve">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="full" type="bool" />
+			<param index="2" name="move" type="Transform3D" />
+			<param index="3" name="warm" type="Vector3" />
+			<description>
+				Solves the side's hand from the animated skeleton's pose: with [param full], [method solve_carried] from [param warm]; without, [method reapply_carried] with [param move]. [method get_ik_target] is then in the animated skeleton's hand bone's frame.
+			</description>
+		</method>
+		<method name="solve_carried">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="thigh_carry" type="Transform3D" />
+			<param index="2" name="hand_carry" type="Transform3D" />
+			<param index="3" name="hand_rest" type="Transform3D" />
+			<param index="4" name="warm" type="Vector3" />
+			<description>
+				Finds the side's resting hand: the rigid move, in the thigh's rest frame, that lays the hand flat against the thigh where its wrist lands and puts its palm on the skin. [param thigh_carry] and [param hand_carry] take a point at rest to where the pose has it; [param warm], an earlier solve's [method get_outward], or zero.
+			</description>
+		</method>
+	</methods>
+</class>

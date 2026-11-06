@@ -240,6 +240,7 @@
 #include "scene/3d/drape_hull_solver.h"
 #include "scene/3d/drape_cloth_modifier_3d.h"
 #include "scene/3d/drape_rings_modifier_3d.h"
+#include "scene/3d/seated_hands_solver.h"
 #include "scene/3d/fabr_ik_3d.h"
 #include "scene/3d/fog_volume.h"
 #include "scene/3d/gpu_particles_3d.h"
@@ -688,6 +689,7 @@ void register_scene_types() {
 	GDREGISTER_CLASS(DrapeRingsModifier3D);
 	GDREGISTER_CLASS(DrapeClothModifier3D);
 	GDREGISTER_CLASS(DrapeHullSolver);
+	GDREGISTER_CLASS(SeatedHandsSolver);
 	GDREGISTER_VIRTUAL_CLASS(SpringBoneCollision3D);
 	GDREGISTER_CLASS(SpringBoneCollisionSphere3D);
 	GDREGISTER_CLASS(SpringBoneCollisionCapsule3D);
