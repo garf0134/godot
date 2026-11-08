@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="BodyContactsSolver" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Moves a played clip's hand onto the same place on another body.
+	</brief_description>
+	<description>
+		Holds a body's contact points (triangles of its mesh and barycentric weights, each corner skinned by up to [code]slots[/code] bones, set by [method set_points]), how each of its bones is read off a character's animated skeleton ([method set_skeleton], [method set_bone]), its torso's skin profile ([method set_torso]), its arms ([method set_arm]) and the spine bones that lean ([method set_lean_chain]). Each tick, after [method begin_tick]: [method place] poses a hand's contact point and its anchor on the animated pose, [method aim] sets the hand's target (the clip's hand moved rigidly by the miss) and the lean a target past the arm's reach needs, [method lean] turns the spine and carries the targets with it, and [method clear_forearm] turns a target about its contact point until the forearm to it is out of the torso, then finds the elbow's pole. Side 0 is the left, 1 the right; positions are in the skeleton's space.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="aim">
+			<return type="float" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="miss" type="Vector3" />
+			<param index="2" name="anchor_bone" type="int" />
+			<description>
+				Sets the side's target: the clip's hand moved rigidly by [param miss], its contact point in the hand, and whether the arm reaches it. Returns the lean the target needs at full weight, radians, or 0 when it needs none, its anchor ([param anchor_bone], -1 for none) is carried by the leaning spine, or no lean up to the tuning's [code]max_lean[/code] brings it within reach.
+			</description>
+		</method>
+		<method name="begin_tick">
+			<return type="void" />
+			<description>
+				Starts a tick: the bones' carries are read anew, and no target is carried by a lean until [method aim] sets it again.
+			</description>
+		</method>
+		<method name="clear_forearm">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<description>
+				Turns the side's target about its contact point, by [code]tilt_step[/code] up to [code]max_tilt[/code], until the forearm to it sinks into the torso no deeper than the clip's own forearm plus [code]forearm_tolerance[/code], or as little as it can; then finds the elbow's pole ([method has_pole]).
+			</description>
+		</method>
+		<method name="clear_torso">
+			<return type="void" />
+			<description>
+				Forgets the torso: [method clear_forearm] leaves the target as it is.
+			</description>
+		</method>
+		<method name="get_clip_forearm_sink" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="side" type="int" />
+			<description>
+				How deep the clip's own forearm sinks into the torso, metres (negative: clear by that much).
+			</description>
+		</method>
+		<method name="get_forearm_sink" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="side" type="int" />
+			<description>
+				How deep the forearm to the side's target sinks into the torso after [method clear_forearm], metres.
+			</description>
+		</method>
+		<method name="get_lean_axis" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="side" type="int" />
+			<description>
+				The axis of the lean [method aim] found for the side, skeleton space.
+			</description>
+		</method>
+		<method name="get_local_target" qualifiers="const">
+			<return type="Transform3D" />
+			<param index="0" name="side" type="int" />
+			<description>
+				The side's hand target, skeleton space.
+			</description>
+		</method>
+		<method name="get_point_in_hand" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="side" type="int" />
+			<description>
+				The side's contact point in the clip's hand bone's frame.
+			</description>
+		</method>
+		<method name="get_pole" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="side" type="int" />
+			<description>
+				The elbow's pole [method clear_forearm] found for the side.
+			</description>
+		</method>
+		<method name="get_posed_normal" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The normal of the point [method posed] last posed.
+			</description>
+		</method>
+		<method name="get_tilt" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="side" type="int" />
+			<description>
+				The turn of the side's target about its contact point [method clear_forearm] chose, radians.
+			</description>
+		</method>
+		<method name="has_pole" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="side" type="int" />
+			<description>
+				Whether the side's arm is straight or folded enough to need a pole for its elbow.
+			</description>
+		</method>
+		<method name="is_reachable" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="side" type="int" />
+			<description>
+				Whether the side's target is within the arm's reach, a lean included.
+			</description>
+		</method>
+		<method name="lean">
+			<return type="void" />
+			<param index="0" name="axis" type="Vector3" />
+			<param index="1" name="angle" type="float" />
+			<description>
+				Turns the lean chain by [param angle] about [param axis], each bone an equal share, on the animated skeleton's pose, and carries each target [method aim] set this tick with its anchor's bone.
+			</description>
+		</method>
+		<method name="place">
+			<return type="PackedVector3Array" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="hand_point" type="int" />
+			<param index="2" name="anchor_point" type="int" />
+			<description>
+				Poses the side's hand point and anchor point: [the hand point, the anchor, the anchor's normal], skeleton space.
+			</description>
+		</method>
+		<method name="posed">
+			<return type="Vector3" />
+			<param index="0" name="point" type="int" />
+			<description>
+				Where the animated pose has contact point [param point]: each corner of its triangle skinned by its bones' carries, as the mesh is.
+			</description>
+		</method>
+		<method name="set_arm">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="shoulder" type="int" />
+			<param index="2" name="elbow" type="int" />
+			<param index="3" name="hand" type="int" />
+			<param index="4" name="upper" type="float" />
+			<param index="5" name="fore" type="float" />
+			<param index="6" name="forearm_radius" type="float" />
+			<description>
+				Sets the side's shoulder, elbow and hand bones on the animated skeleton, the upper arm's and forearm's lengths at rest, and the forearm's skin radius (negative: no forearm check).
+			</description>
+		</method>
+		<method name="set_bone">
+			<return type="void" />
+			<param index="0" name="bone" type="int" />
+			<param index="1" name="index" type="int" />
+			<param index="2" name="rest_turn" type="Basis" />
+			<param index="3" name="skinned_rest_inverse" type="Transform3D" />
+			<description>
+				Sets how base bone [param bone] is read off the animated skeleton: its [param index] there, the turn from that bone's rest to the skinned skeleton's, and the skinned rest's inverse.
+			</description>
+		</method>
+		<method name="set_bone_count">
+			<return type="void" />
+			<param index="0" name="count" type="int" />
+			<description>
+				Sets how many base bones the points' corners name; each is unread until [method set_bone].
+			</description>
+		</method>
+		<method name="set_lean_chain">
+			<return type="void" />
+			<param index="0" name="chain" type="PackedInt32Array" />
+			<description>
+				Sets the spine bones that lean, a chain from the hips up, by index on the animated skeleton.
+			</description>
+		</method>
+		<method name="set_local_target">
+			<return type="void" />
+			<param index="0" name="side" type="int" />
+			<param index="1" name="target" type="Transform3D" />
+			<description>
+				Replaces the side's hand target, skeleton space.
+			</description>
+		</method>
+		<method name="set_points">
+			<return type="void" />
+			<param index="0" name="point_triangles" type="PackedInt32Array" />
+			<param index="1" name="point_weights" type="PackedVector3Array" />
+			<param index="2" name="corners" type="PackedInt32Array" />
+			<param index="3" name="positions" type="PackedVector3Array" />
+			<param index="4" name="bones" type="PackedInt32Array" />
+			<param index="5" name="weights" type="PackedFloat32Array" />
+			<param index="6" name="normals" type="PackedVector3Array" />
+			<param index="7" name="slots" type="int" />
+			<description>
+				Sets the body's contact points: each point's triangle and barycentric weights, each triangle's three corners, each corner's rest position, [param slots] bones and weights, and each triangle's rest normal.
+			</description>
+		</method>
+		<method name="set_skeleton">
+			<return type="void" />
+			<param index="0" name="skeleton" type="Skeleton3D" />
+			<description>
+				Sets the animated skeleton the poses are read from and the lean is written to.
+			</description>
+		</method>
+		<method name="set_torso">
+			<return type="void" />
+			<param index="0" name="from" type="Vector3" />
+			<param index="1" name="axis" type="Vector3" />
+			<param index="2" name="front" type="Vector3" />
+			<param index="3" name="profile" type="PackedFloat32Array" />
+			<param index="4" name="index" type="int" />
+			<param index="5" name="rest_turn" type="Basis" />
+			<param index="6" name="skinned_rest_inverse" type="Transform3D" />
+			<description>
+				Sets the torso's skin profile (as a seated hands thigh's) and the bone that carries it.
+			</description>
+		</method>
+		<method name="set_tuning">
+			<return type="void" />
+			<param index="0" name="tuning" type="Dictionary" />
+			<description>
+				Sets the tuning: [code]sections[/code], [code]sectors[/code], [code]profile_from[/code], [code]profile_to[/code], [code]reach_share[/code], [code]lean_reach[/code], [code]max_lean[/code], [code]forearm_samples[/code], [code]forearm_tolerance[/code], [code]tilt_step[/code], [code]max_tilt[/code], [code]near_straight[/code], [code]near_folded[/code] and [code]pole_out[/code].
+			</description>
+		</method>
+	</methods>
+</class>

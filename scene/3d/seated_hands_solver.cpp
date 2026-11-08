@@ -81,15 +81,7 @@ void SeatedHandsSolver::set_tuning(const Dictionary &p_tuning) {
 
 void SeatedHandsSolver::set_thigh(int p_side, const Vector3 &p_from, const Vector3 &p_axis, const Vector3 &p_front, const PackedFloat32Array &p_profile) {
 	ERR_FAIL_INDEX(p_side, 2);
-	Thigh &thigh = thighs[p_side];
-	thigh.from = p_from;
-	thigh.axis = p_axis;
-	thigh.front = p_front;
-	thigh.side = p_axis.normalized().cross(p_front);
-	thigh.profile.resize(p_profile.size());
-	for (int i = 0; i < p_profile.size(); i++) {
-		thigh.profile[i] = p_profile[i];
-	}
+	thighs[p_side].set(p_from, p_axis, p_front, p_profile);
 }
 
 void SeatedHandsSolver::set_palm(int p_side, const Vector3 &p_wrist, const Vector3 &p_knuckle, const Vector3 &p_normal, const Vector3 &p_point,
@@ -148,27 +140,11 @@ Transform3D SeatedHandsSolver::_carry(const Bone &p_bone, const Skeleton3D *p_sk
 }
 
 Vector3 SeatedHandsSolver::_polar(const Thigh &p_thigh, const Vector3 &p_point) const {
-	const Vector3 d = p_point - p_thigh.from;
-	const real_t t = d.dot(p_thigh.axis) / p_thigh.axis.length_squared();
-	const Vector3 across = d - p_thigh.axis * t;
-	return Vector3(t, Math::atan2(across.dot(p_thigh.side), across.dot(p_thigh.front)), across.length());
+	return p_thigh.polar(p_point);
 }
 
 real_t SeatedHandsSolver::_skin_at(const Thigh &p_thigh, real_t p_t, real_t p_angle) const {
-	if ((int)p_thigh.profile.size() < sections * sectors) {
-		return 0.0;
-	}
-	const real_t s = CLAMP((p_t - profile_from) / (profile_to - profile_from) * sections - 0.5, (real_t)0.0, (real_t)(sections - 1));
-	const real_t a = Math::fposmod(p_angle / (real_t)Math::TAU * sectors, (real_t)sectors);
-	const int s0 = (int)s;
-	const int s1 = MIN(s0 + 1, sections - 1);
-	const int a0 = (int)a % sectors;
-	const int a1 = (a0 + 1) % sectors;
-	const real_t fs = s - s0;
-	const real_t fa = a - (int)a;
-	const real_t near = Math::lerp(p_thigh.profile[s0 * sectors + a0], p_thigh.profile[s0 * sectors + a1], fa);
-	const real_t far = Math::lerp(p_thigh.profile[s1 * sectors + a0], p_thigh.profile[s1 * sectors + a1], fa);
-	return Math::lerp(near, far, fs);
+	return p_thigh.skin_at(p_t, p_angle, sections, sectors, profile_from, profile_to);
 }
 
 real_t SeatedHandsSolver::_gap(const Thigh &p_thigh, const Vector3 &p_point) const {

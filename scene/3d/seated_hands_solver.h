@@ -32,6 +32,7 @@
 
 #include "core/object/ref_counted.h"
 #include "core/templates/local_vector.h"
+#include "scene/3d/body_profile.h"
 
 class Skeleton3D;
 
@@ -45,13 +46,7 @@ class Skeleton3D;
 class SeatedHandsSolver : public RefCounted {
 	GDCLASS(SeatedHandsSolver, RefCounted);
 
-	struct Thigh {
-		Vector3 from;
-		Vector3 axis;
-		Vector3 front;
-		Vector3 side;
-		LocalVector<real_t> profile;
-	};
+	using Thigh = BodyProfile;
 	struct Palm {
 		Vector3 wrist;
 		Vector3 knuckle;
